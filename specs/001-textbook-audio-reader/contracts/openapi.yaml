@@ -1,0 +1,197 @@
+openapi: 3.1.0
+info:
+  title: Textbook Audio Reader API
+  version: 1.0.0
+  description: Stateless local endpoints for one temporary browser session.
+servers:
+  - url: /
+paths:
+  /api/extract:
+    post:
+      summary: Extract reading-order text from one normalized page photo with local OCR
+      operationId: extractPage
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  contentMediaType: image/jpeg
+                  format: binary
+                  description: Upright JPEG no larger than 4 MiB or 2,400 px on its longest edge.
+      responses:
+        "200":
+          description: Local OCR completed, including partial or unreadable results.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtractionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMedia"
+        "500":
+          $ref: "#/components/responses/InferenceFailure"
+        "503":
+          $ref: "#/components/responses/ModelUnavailable"
+  /api/speech:
+    post:
+      summary: Create one WAV recording from ordered page text with local Kokoro inference
+      operationId: createSpeech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [pages]
+              properties:
+                pages:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  description: Readable page text in confirmed order; combined text may not exceed 100,000 characters.
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [id, text]
+                    properties:
+                      id:
+                        type: string
+                        minLength: 1
+                      text:
+                        type: string
+                        minLength: 1
+      responses:
+        "200":
+          description: Complete local recording containing every supplied page in order.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+            Content-Disposition:
+              schema:
+                type: string
+                example: attachment; filename="textbook-reading.wav"
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+        "500":
+          $ref: "#/components/responses/InferenceFailure"
+        "503":
+          $ref: "#/components/responses/ModelUnavailable"
+components:
+  schemas:
+    ExtractionResult:
+      type: object
+      additionalProperties: false
+      required: [status, issues, confidence, text]
+      properties:
+        status:
+          type: string
+          enum: [readable, partial, unreadable]
+        issues:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [low_confidence, no_text]
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        text:
+          type: string
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_image
+            - too_large
+            - unsupported_image
+            - inference_failure
+            - model_unavailable
+        message:
+          type: string
+        retryable:
+          type: boolean
+  responses:
+    BadRequest:
+      description: Missing or invalid request data.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    TooLarge:
+      description: Image, page count, or combined text exceeds an application limit.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnsupportedMedia:
+      description: The upload is not a valid JPEG image.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    InferenceFailure:
+      description: Local OCR or speech inference failed after its model was loaded.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ModelUnavailable:
+      description: A required local model is not loaded or its files are unavailable.
+      headers:
+        Cache-Control:
+          schema:
+            type: string
+            const: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Problem"
