@@ -1,4 +1,4 @@
-"""Minimal smoke check for model-independent text-to-WAV helpers."""
+"""Minimal model-independent API and static-shell smoke checks."""
 
 from pathlib import Path
 import os
@@ -64,6 +64,16 @@ def main() -> None:
         reader_app.load_ocr = lambda: object()
         reader_app.tts.initialize_pipeline = lambda: None
         with TestClient(reader_app.app) as client:
+            home = client.get("/")
+            assert home.status_code == 200
+            assert all(
+                marker in home.text
+                for marker in (
+                    'data-action="crop"',
+                    'data-action="duplicate"',
+                    'id="crop-dialog"',
+                )
+            )
             assert client.get("/recordings/").status_code == 200
             response = client.get("/api/recordings")
             assert response.status_code == 200

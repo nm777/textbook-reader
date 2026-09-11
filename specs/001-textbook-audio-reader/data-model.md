@@ -1,6 +1,6 @@
 # Data Model: Textbook Audio Reader
 
-All user-facing entities are temporary and exist only in the current browser tab or one local server request. There is no persistent data model.
+Page-processing entities exist only in the current browser tab. Completed audio files persist on the local server for seven days without a database.
 
 ## Conversion Session
 
@@ -8,7 +8,7 @@ Represents the user's current ordered set of pages and its conversion result.
 
 | Field | Type | Rules |
 |-------|------|-------|
-| `pages` | ordered `PagePhoto[]` | 0-20 while editing; 1-20 to start extraction |
+| `pages` | ordered `PagePhoto[]` | 0-20 selected or duplicated entries while editing; 1-20 to start extraction |
 | `stage` | enum | `waiting`, `extracting`, `attention`, `synthesizing`, `complete`, or `failed` |
 | `currentPage` | integer or absent | 1-based position shown during extraction |
 | `audio` | `AudioRecording` or absent | Present only at `complete` |
@@ -35,7 +35,9 @@ Represents one selected page and its local OCR outcome.
 | `id` | string | Stable, tab-local unique identifier |
 | `name` | string | Original display name; used only in the browser UI |
 | `previewUrl` | object URL | Created once and revoked when the page leaves the session |
-| `image` | JPEG blob | Upright, at most 4 MiB, at most 2,400 px on its longest edge, never upscaled |
+| `source` | JPEG blob | Immutable upright normalized full image; may be shared by duplicate entries |
+| `crop` | edge-trim object | Independent top, right, bottom, and left percentages; zero means untrimmed |
+| `image` | JPEG blob | Derived from `source` and `crop`; at most 4 MiB and never upscaled |
 | `position` | integer | Derived from array order; contiguous and 1-based in the UI |
 | `extractionState` | enum | `ready`, `extracting`, `readable`, `partial`, `unreadable`, or `failed` |
 | `text` | string | Non-empty only when OCR returned usable content |
@@ -46,6 +48,8 @@ Represents one selected page and its local OCR outcome.
 ### Validation Rules
 
 - Accept at most 20 pages cumulatively across file-picker actions.
+- Insert duplicates after their source with a fresh ID, blank OCR result, and independent crop metadata.
+- Keep crop bounds inside the source with at least 50 pixels of width and height; cancelling changes nothing.
 - Reject originals over 20 MiB before browser normalization.
 - Decode the normalized image with Pillow rather than trusting its extension or declared media type.
 - Reject a normalized image over 4 MiB, over 2,400 px on its longest edge, or not encoded as JPEG.
@@ -98,7 +102,8 @@ Represents an actionable validation, local inference, or network error.
 ## Relationships And Lifecycle
 
 - A `ConversionSession` contains 0-20 ordered `PagePhoto` entities.
+- Duplicate `PagePhoto` entries may share one immutable source blob while owning separate crops and preview URLs.
 - Each `PagePhoto` has at most one current `ExtractedText` result.
 - A `ConversionSession` has at most one `AudioRecording` derived from all currently ordered readable page texts.
 - Editing a page invalidates the current `AudioRecording`; successful retry replaces only that page's extraction result.
-- Closing or refreshing the tab releases all browser entities. Every endpoint releases request buffers, and speech generation removes its temporary file after transfer.
+- Closing or refreshing the tab releases all browser entities. Every endpoint releases request buffers; completed audio remains server-side for seven days.

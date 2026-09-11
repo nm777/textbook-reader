@@ -275,7 +275,83 @@ input[type="file"]::file-selector-button {
   border-color: var(--navy);
 }
 
-.page-actions :where([data-action="replace"], [data-action="retry"]) {
+.page-actions :where([data-action="replace"], [data-action="crop"], [data-action="duplicate"], [data-action="retry"]) {
+  color: var(--navy);
+  background: transparent;
+  border-color: var(--navy);
+}
+
+dialog {
+  width: min(100% - 2rem, 42rem);
+  max-height: calc(100vh - 2rem);
+  padding: clamp(1rem, 4vw, 1.5rem);
+  overflow: auto;
+  color: var(--ink);
+  background: var(--paper-light);
+  border: 1px solid var(--rule);
+  border-top: 0.35rem solid var(--red);
+  border-radius: 0.25rem;
+  box-shadow: 0 1rem 3rem rgb(25 37 46 / 30%);
+}
+
+dialog::backdrop {
+  background: rgb(25 37 46 / 72%);
+}
+
+dialog h2 {
+  margin-bottom: 0.75rem;
+}
+
+#crop-preview {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 42vh;
+  margin: 1rem auto;
+  background: #e8e5dc;
+  border: 1px solid var(--rule);
+}
+
+#crop-controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem 0.75rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--rule);
+  font-family: system-ui, sans-serif;
+}
+
+#crop-controls legend {
+  padding-inline: 0.35rem;
+  font-weight: 700;
+}
+
+#crop-controls label {
+  margin: 0;
+}
+
+#crop-controls input[type="range"] {
+  width: 100%;
+  min-height: 2.75rem;
+}
+
+#crop-error {
+  min-height: 1.55rem;
+  margin: 0.75rem 0;
+  color: #78281f;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+:is(#crop-reset, #crop-cancel) {
   color: var(--navy);
   background: transparent;
   border-color: var(--navy);
@@ -429,10 +505,26 @@ audio {
     filter: none;
   }
 
-  .page-actions :is([data-action="replace"], [data-action="retry"]):not(:disabled):hover {
+  .page-actions :is([data-action="replace"], [data-action="crop"], [data-action="duplicate"], [data-action="retry"]):not(:disabled):hover,
+  :is(#crop-reset, #crop-cancel):not(:disabled):hover {
     color: #fff;
     background: var(--navy);
     filter: none;
+  }
+}
+
+@media (max-width: 28rem) {
+  .page-actions,
+  #crop-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dialog-actions {
+    flex-direction: column;
+  }
+
+  .dialog-actions button {
+    width: 100%;
   }
 }
 
@@ -475,6 +567,6 @@ audio {
   }
 
   .page-actions {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

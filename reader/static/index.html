@@ -53,6 +53,8 @@
             <button type="button" data-action="move-up" aria-label="Move page up">Move up</button>
             <button type="button" data-action="move-down" aria-label="Move page down">Move down</button>
             <button type="button" data-action="replace" aria-label="Replace page">Replace</button>
+            <button type="button" data-action="crop" aria-label="Crop page">Crop</button>
+            <button type="button" data-action="duplicate" aria-label="Duplicate page">Duplicate</button>
             <button type="button" data-action="remove" aria-label="Remove page">Remove</button>
             <button type="button" data-action="retry" aria-label="Retry page extraction">Retry</button>
           </div>
@@ -79,5 +81,28 @@
       <a id="audio-download" download="textbook-reading.wav" hidden>Download completed recording</a>
     </section>
   </main>
+
+  <dialog id="crop-dialog" aria-labelledby="crop-heading" aria-describedby="crop-instructions">
+    <h2 id="crop-heading">Crop page</h2>
+    <p id="crop-instructions">Trim the edges, then check the selected area in the preview.</p>
+    <canvas id="crop-preview" aria-label="Preview of the cropped page"></canvas>
+    <fieldset id="crop-controls">
+      <legend>Edge trims</legend>
+      <label for="crop-top">Top: <output id="crop-top-value" for="crop-top">0%</output></label>
+      <input id="crop-top" data-crop-edge="top" type="range" min="0" max="95" value="0">
+      <label for="crop-right">Right: <output id="crop-right-value" for="crop-right">0%</output></label>
+      <input id="crop-right" data-crop-edge="right" type="range" min="0" max="95" value="0">
+      <label for="crop-bottom">Bottom: <output id="crop-bottom-value" for="crop-bottom">0%</output></label>
+      <input id="crop-bottom" data-crop-edge="bottom" type="range" min="0" max="95" value="0">
+      <label for="crop-left">Left: <output id="crop-left-value" for="crop-left">0%</output></label>
+      <input id="crop-left" data-crop-edge="left" type="range" min="0" max="95" value="0">
+    </fieldset>
+    <p id="crop-error" role="alert"></p>
+    <div class="dialog-actions">
+      <button id="crop-reset" type="button">Reset crop</button>
+      <button id="crop-cancel" type="button">Cancel</button>
+      <button id="crop-apply" type="button">Apply crop</button>
+    </div>
+  </dialog>
 </body>
 </html>

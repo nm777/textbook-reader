@@ -23,19 +23,20 @@ As a reader using a phone, I want to select or take photos of textbook pages and
 
 ---
 
-### User Story 2 - Arrange Multiple Pages (Priority: P2)
+### User Story 2 - Arrange And Crop Multiple Pages (Priority: P2)
 
-As a reader processing several pages, I want to review and rearrange page photos before conversion so the audio follows the textbook's reading order.
+As a reader processing several pages or columns, I want to duplicate, crop, and rearrange page photos before conversion so the audio follows the textbook's reading order.
 
 **Why this priority**: Mobile photo selection does not always preserve the intended order, and incorrect order makes multi-page audio difficult to follow.
 
-**Independent Test**: Select three distinctly numbered page photos in the wrong order, rearrange them, convert them, and verify that the recording reads them in the confirmed order.
+**Independent Test**: Select a two-column page, duplicate it, crop each entry to one column, convert, and verify that the recording reads only those columns in the displayed order.
 
 **Acceptance Scenarios**:
 
 1. **Given** multiple photos have been selected, **When** their previews appear, **Then** each photo has a clear position in the current reading order.
 2. **Given** three photos are in the wrong order, **When** the user rearranges and confirms them, **Then** the extracted text and audio follow the confirmed order.
 3. **Given** photos are awaiting confirmation, **When** the user adds or removes a photo, **Then** the remaining photos and their order are updated before conversion.
+4. **Given** a photo contains multiple columns, **When** the user duplicates it and independently crops and arranges the entries, **Then** only each retained region is extracted and spoken in displayed order.
 
 ---
 
@@ -59,19 +60,20 @@ As a reader, I want to download a completed recording so I can listen later with
 - Photos with different orientations are presented and read upright when their intended orientation can be determined; otherwise, the affected photo is identified for replacement.
 - If one page fails during a multi-page conversion, the app does not present the result as complete and identifies the page that needs attention.
 - If processing is interrupted, no corrupt recording is offered; the user can retry without rebuilding the confirmed page order while the session remains open.
-- If the user selects more than 20 photos, the app keeps the current selection unchanged and explains the 20-page session limit.
-- Repeated headers, footers, page numbers, captions, tables, formulas, and multi-column layouts may be spoken imperfectly; the result preserves detected reading order without promising specialized interpretation.
+- If selecting or duplicating would exceed 20 page entries, the app keeps the current selection unchanged and explains the limit.
+- Cancelling a crop leaves the page and audio unchanged; applying or resetting it clears that page's extraction and the current browser audio.
+- Multi-column layouts may be spoken imperfectly when left intact. Users can duplicate and crop a photo into ordered regions, but column boundaries are not inferred automatically.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: The system MUST let users select existing page photos or capture new page photos from a supported mobile or desktop device.
-- **FR-002**: The system MUST accept between 1 and 20 page photos in a conversion session.
-- **FR-003**: The system MUST show a preview and an explicit reading-order position for every selected photo before conversion.
-- **FR-004**: Users MUST be able to add, remove, and rearrange selected photos before confirming their order.
-- **FR-005**: The system MUST begin extraction and audio conversion only after the user confirms the page selection and order.
-- **FR-006**: The system MUST extract readable printed text from each confirmed photo and combine it in the confirmed page order.
+- **FR-002**: The system MUST accept between 1 and 20 ordered page entries; selected photos and duplicates each count as one entry.
+- **FR-003**: The system MUST show a preview and an explicit reading-order position for every page entry before conversion.
+- **FR-004**: Users MUST be able to add, duplicate, crop, remove, and rearrange page entries before confirming their order.
+- **FR-005**: The system MUST begin extraction and audio conversion only after the user confirms the page entries, applied crops, and order.
+- **FR-006**: The system MUST extract readable printed text from each confirmed page entry's applied crop and combine it in the confirmed order.
 - **FR-007**: The system MUST account for common phone-photo orientation so text is processed in its intended upright orientation when that orientation can be determined.
 - **FR-008**: The system MUST convert the combined extracted text into one spoken recording for the session.
 - **FR-009**: The system MUST show whether a conversion is waiting, processing, complete, or failed.
@@ -83,11 +85,13 @@ As a reader, I want to download a completed recording so I can listen later with
 - **FR-015**: The system MUST provide clear, actionable feedback when a photo is unsupported, a limit is exceeded, processing fails, or a download cannot be completed.
 - **FR-016**: The system MUST keep photos and extracted text in the browser session and retain completed audio on the service for no more than seven days.
 - **FR-017**: Users MUST be able to list and redownload recordings that have not expired.
+- **FR-018**: Users MUST be able to revise, reset, apply, or cancel a rectangular crop independently for each page entry using touch and keyboard controls.
+- **FR-019**: Users MUST be able to duplicate a page entry directly after it with a fresh identity and extraction state.
 
 ### Key Entities
 
 - **Conversion Session**: A temporary unit of work containing selected pages, their confirmed order, processing status, any page-specific problems, and the resulting recording.
-- **Page Photo**: One photographed textbook page, including its preview, current order position, orientation, and extraction status.
+- **Page Photo**: One ordered entry containing a normalized source image, independent crop, derived preview, position, and extraction status; duplicates may share the immutable source.
 - **Extracted Text**: The readable content obtained from one or more page photos and combined according to the confirmed order.
 - **Audio Recording**: The spoken result of a completed conversion, including playback duration, current playback position, and download availability.
 
@@ -103,6 +107,7 @@ As a reader, I want to download a completed recording so I can listen later with
 - **SC-006**: Once conversion is complete, playback begins within 3 seconds of the user's play action in at least 95% of attempts.
 - **SC-007**: In 20 completed test conversions, every recording can be played from beginning to end in the app and after download using the test device's standard audio capability.
 - **SC-008**: In a usability check, users rate the mobile capture-to-playback flow at least 4 out of 5 for ease of use.
+- **SC-009**: In at least 9 of 10 representative two-column trials, the recording reads the user-defined column crops in displayed order without reading excluded text.
 
 ## Assumptions
 
@@ -110,6 +115,6 @@ As a reader, I want to download a completed recording so I can listen later with
 - A conversion session is temporary. Refreshing or closing it discards photos and browser results; completed recordings remain available from the service for seven days.
 - In-browser playback is the default outcome, and download is the only required offline capability.
 - The first release supports photographed pages containing primarily printed text in one language at a time. Handwriting, translation, and specialized interpretation of formulas, tables, or complex layouts are out of scope.
-- Users are responsible for taking sufficiently clear, well-lit, uncropped photos and for having permission to process the material.
+- Users are responsible for clear, well-lit source photos containing all desired text; cropping cannot recover content omitted from the source.
 - Importing document files, editing extracted text, choosing voices, and changing speech speed are out of scope.
 - Conversion and recording history require a network connection; only a previously downloaded recording is expected to work offline.

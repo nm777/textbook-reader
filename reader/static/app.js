@@ -4,6 +4,7 @@ const MAX_PAGES = 20;
 const MAX_ORIGINAL_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 2400;
+const MIN_CROP_EDGE = 50;
 
 const photoInput = document.querySelector("#photo-input");
 const cameraButton = document.querySelector("#camera-button");
@@ -19,6 +20,15 @@ const status = document.querySelector("#status");
 const audioResult = document.querySelector("#audio-result");
 const audioPlayer = document.querySelector("#audio-player");
 const audioDownload = document.querySelector("#audio-download");
+const cropDialog = document.querySelector("#crop-dialog");
+const cropPreview = document.querySelector("#crop-preview");
+const cropControls = document.querySelector("#crop-controls");
+const cropInputs = Array.from(cropControls.querySelectorAll("[data-crop-edge]"));
+const cropError = document.querySelector("#crop-error");
+const cropHeading = document.querySelector("#crop-heading");
+const cropReset = document.querySelector("#crop-reset");
+const cropCancel = document.querySelector("#crop-cancel");
+const cropApply = document.querySelector("#crop-apply");
 
 const pages = [];
 let stage = "waiting";
@@ -28,6 +38,9 @@ let audioUrl = null;
 let requestController = null;
 let operation = 0;
 let nextPageId = 1;
+let cropPage = null;
+let cropBitmap = null;
+let cropReturnPageId = null;
 
 const extractionLabels = {
   ready: "ready to convert",
@@ -79,6 +92,8 @@ function render() {
         "move-up": `Move page ${position} up`,
         "move-down": `Move page ${position} down`,
         replace: `Replace page ${position}`,
+        crop: `Crop page ${position}`,
+        duplicate: `Duplicate page ${position}`,
         remove: `Remove page ${position}`,
         retry: `Retry text extraction for page ${position}`,
       };
@@ -186,11 +201,13 @@ async function normalizeImage(file) {
   }
 }
 
-function newPage(file, image) {
+function newPage(file, source, image = source, crop = { top: 0, right: 0, bottom: 0, left: 0 }) {
   return {
     id: `page-${nextPageId++}`,
     name: file.name || "camera photo",
+    source,
     image,
+    crop: { ...crop },
     previewUrl: URL.createObjectURL(image),
     extractionState: "ready",
     text: "",
@@ -200,11 +217,183 @@ function newPage(file, image) {
   };
 }
 
+function duplicatePage(page) {
+  const index = pages.indexOf(page);
+  if (index < 0) return;
+  if (pages.length >= MAX_PAGES) {
+    message = `You can keep up to ${MAX_PAGES} pages. Remove a page before duplicating another.`;
+    render();
+    return;
+  }
+  stopCurrentOperation();
+  const duplicate = newPage({ name: page.name }, page.source, page.image, page.crop);
+  pages.splice(index + 1, 0, duplicate);
+  clearAudio();
+  setStage("waiting", `Page ${index + 1} was duplicated as page ${index + 2}. Crop each copy, then confirm and convert.`);
+  focusCropButton(duplicate.id);
+}
+
+function cropSelection() {
+  const crop = Object.fromEntries(cropInputs.map((input) => [input.dataset.cropEdge, Number(input.value)]));
+  const left = Math.round(cropBitmap.width * crop.left / 100);
+  const top = Math.round(cropBitmap.height * crop.top / 100);
+  const right = Math.round(cropBitmap.width * (1 - crop.right / 100));
+  const bottom = Math.round(cropBitmap.height * (1 - crop.bottom / 100));
+  return { crop, left, top, width: right - left, height: bottom - top };
+}
+
+function renderCrop() {
+  if (!cropBitmap) return false;
+  for (const input of cropInputs) {
+    document.querySelector(`#${input.id}-value`).value = `${input.value}%`;
+  }
+  const selection = cropSelection();
+  const valid = selection.width >= MIN_CROP_EDGE && selection.height >= MIN_CROP_EDGE;
+  cropError.textContent = valid ? "" : `Leave at least ${MIN_CROP_EDGE} pixels of width and height.`;
+  cropApply.disabled = !valid || preparing;
+  if (!valid) {
+    cropPreview.width = 1;
+    cropPreview.height = 1;
+    return null;
+  }
+
+  cropPreview.width = selection.width;
+  cropPreview.height = selection.height;
+  cropPreview.getContext("2d").drawImage(
+    cropBitmap,
+    selection.left,
+    selection.top,
+    selection.width,
+    selection.height,
+    0,
+    0,
+    selection.width,
+    selection.height,
+  );
+  return selection;
+}
+
+function focusCropButton(pageId) {
+  requestAnimationFrame(() => {
+    pageList.querySelector(`[data-page-id="${pageId}"] [data-action="crop"]`)?.focus();
+  });
+}
+
+function closeCrop(restoreFocus = false) {
+  const pageId = cropReturnPageId;
+  cropBitmap?.close();
+  cropBitmap = null;
+  cropPage = null;
+  cropReturnPageId = null;
+  cropPreview.width = 1;
+  cropPreview.height = 1;
+  cropControls.disabled = false;
+  cropReset.disabled = false;
+  cropCancel.disabled = false;
+  cropApply.disabled = false;
+  if (restoreFocus && pageId) focusCropButton(pageId);
+}
+
+async function openCrop(page) {
+  const currentOperation = ++operation;
+  const previousStage = stage;
+  const pageId = page.id;
+  preparing = true;
+  render();
+  try {
+    const bitmap = await createImageBitmap(page.source);
+    if (currentOperation !== operation || !pages.includes(page)) {
+      bitmap.close();
+      return;
+    }
+    cropBitmap = bitmap;
+    cropPage = page;
+    cropReturnPageId = page.id;
+    cropHeading.textContent = `Crop page ${pages.indexOf(page) + 1}`;
+    for (const input of cropInputs) input.value = page.crop[input.dataset.cropEdge];
+    cropError.textContent = "";
+    renderCrop();
+    cropDialog.showModal();
+  } catch {
+    if (currentOperation !== operation) return;
+    closeCrop();
+    setStage(
+      previousStage,
+      `Page ${pages.indexOf(page) + 1} could not be opened for cropping. The page was not changed.`,
+    );
+    focusCropButton(pageId);
+  } finally {
+    if (currentOperation === operation) {
+      preparing = false;
+      render();
+      renderCrop();
+    }
+  }
+}
+
+async function applyCrop() {
+  if (!cropPage) return;
+  const selection = renderCrop();
+  if (!selection) return;
+  const page = cropPage;
+  const currentOperation = ++operation;
+  preparing = true;
+  cropControls.disabled = true;
+  cropReset.disabled = true;
+  cropCancel.disabled = true;
+  cropApply.disabled = true;
+  cropError.textContent = "Preparing cropped page...";
+  render();
+  try {
+    const image = await canvasToJpeg(cropPreview);
+    if (currentOperation !== operation || !pages.includes(page)) {
+      if (cropDialog.open) cropDialog.close();
+      return;
+    }
+    if (image.size > MAX_IMAGE_BYTES) throw new Error("The cropped photo is over 4 MiB. Trim it more tightly.");
+    const previewUrl = URL.createObjectURL(image);
+    const oldPreviewUrl = page.previewUrl;
+    page.image = image;
+    page.crop = selection.crop;
+    page.previewUrl = previewUrl;
+    page.extractionState = "ready";
+    page.text = "";
+    page.confidence = 0;
+    page.issues = [];
+    page.error = null;
+    URL.revokeObjectURL(oldPreviewUrl);
+    clearAudio();
+    cropDialog.close();
+    setStage("waiting", `Page ${pages.indexOf(page) + 1} was cropped. Review the preview, then confirm and convert.`);
+  } catch (error) {
+    if (currentOperation !== operation) {
+      if (cropDialog.open) cropDialog.close();
+      return;
+    }
+    cropError.textContent = error instanceof Error ? error.message : "The crop could not be applied.";
+  } finally {
+    if (currentOperation === operation) {
+      preparing = false;
+      cropControls.disabled = false;
+      cropReset.disabled = false;
+      cropCancel.disabled = false;
+      render();
+      renderCrop();
+    }
+  }
+}
+
 async function addImages(event) {
   const input = event.currentTarget;
   const files = Array.from(input.files || []);
   input.value = "";
   if (!files.length) return;
+
+  const closedCrop = cropDialog.open;
+  if (closedCrop) {
+    cropDialog.close();
+    stopCurrentOperation();
+  }
 
   if (pages.length + files.length > MAX_PAGES) {
     message = `You can keep up to ${MAX_PAGES} pages. Remove ${
@@ -214,7 +403,7 @@ async function addImages(event) {
     return;
   }
 
-  stopCurrentOperation();
+  if (!closedCrop) stopCurrentOperation();
   const currentOperation = operation;
   preparing = true;
   const additions = [];
@@ -280,7 +469,9 @@ async function replaceImage(page, file) {
     const previewUrl = URL.createObjectURL(image);
     const oldPreviewUrl = page.previewUrl;
     page.name = file.name || "camera photo";
+    page.source = image;
     page.image = image;
+    page.crop = { top: 0, right: 0, bottom: 0, left: 0 };
     page.previewUrl = previewUrl;
     page.extractionState = "ready";
     page.text = "";
@@ -515,6 +706,8 @@ function handlePageAction(event) {
   if (button.dataset.action === "move-up") movePage(page, -1);
   if (button.dataset.action === "move-down") movePage(page, 1);
   if (button.dataset.action === "replace") chooseReplacement(page);
+  if (button.dataset.action === "crop") openCrop(page);
+  if (button.dataset.action === "duplicate") duplicatePage(page);
   if (button.dataset.action === "remove") removePage(page);
   if (button.dataset.action === "retry") convert(page);
 }
@@ -526,8 +719,20 @@ pageList.addEventListener("click", handlePageAction);
 convertButton.addEventListener("click", () => convert());
 retryButton.addEventListener("click", () => convert());
 clearButton.addEventListener("click", startOver);
+cropControls.addEventListener("input", renderCrop);
+cropReset.addEventListener("click", () => {
+  for (const input of cropInputs) input.value = 0;
+  renderCrop();
+});
+cropCancel.addEventListener("click", () => cropDialog.close());
+cropApply.addEventListener("click", applyCrop);
+cropDialog.addEventListener("cancel", (event) => {
+  if (preparing) event.preventDefault();
+});
+cropDialog.addEventListener("close", () => closeCrop(true));
 window.addEventListener("unload", () => {
   requestController?.abort();
+  closeCrop();
   for (const page of pages) URL.revokeObjectURL(page.previewUrl);
   clearAudio();
 });

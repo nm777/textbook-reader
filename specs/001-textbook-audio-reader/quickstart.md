@@ -72,7 +72,7 @@ brew install espeak-ng libsndfile
 
 6. Open `http://localhost:8000` on the host or `http://HOST-LAN-IP:8000` on a phone connected to the same trusted network.
 
-Selected normalized JPEGs and OCR text live in the browser tab until their pages are replaced or removed, or the tab is refreshed or closed. The completed browser audio blob is discarded after any page edit or when the tab ends. An upload exists only for its request and is closed after being read. Completed WAV files remain in `RECORDINGS_DIR` (default `~/.local/share/textbook-reader/recordings`) for redownload from the Past recordings page and are automatically deleted after seven days. A WAV explicitly downloaded to the phone is persistent and must be deleted by the user when no longer wanted.
+Selected normalized source JPEGs, crops, and OCR text live in the browser tab until their pages are replaced or removed, or the tab is refreshed or closed. Duplicate entries share an immutable source without another upload until conversion. The completed browser audio blob is discarded after any page edit or when the tab ends. An upload exists only for its request and is closed after being read. Completed WAV files remain in `RECORDINGS_DIR` (default `~/.local/share/textbook-reader/recordings`) for redownload from the Past recordings page and are automatically deleted after seven days. A WAV explicitly downloaded to the phone is persistent and must be deleted by the user when no longer wanted.
 
 ## Docker Setup
 
@@ -123,7 +123,7 @@ python3 -m compileall reader scripts
 python3 scripts/self_check.py
 ```
 
-The assertion script requires the installed `numpy` and `SoundFile` packages plus the system `libsndfile` library. It verifies ordered text assembly, incremental 24 kHz mono WAV writing, recording retention, and seven-day expiration without loading PaddleOCR or Kokoro. A missing-module or shared-library error means the declared setup dependency is absent; it is separate from live-model acceptance.
+The assertion script requires the installed `numpy` and `SoundFile` packages plus the system `libsndfile` library. It verifies the crop/duplicate shell, ordered text assembly, incremental 24 kHz mono WAV writing, recording retention, and seven-day expiration without loading PaddleOCR or Kokoro. A missing-module or shared-library error means the declared setup dependency is absent; it is separate from live-model acceptance.
 
 With the service running, smoke-check the page and both live routes. The OCR input here must already be a valid JPEG no larger than 4 MiB or 2,400 px on its longest edge; the browser normally performs that normalization.
 
@@ -144,19 +144,22 @@ The final command deliberately saves a client-side WAV; play it and remove it af
 3. Play the recording from beginning to end. Pause, resume, seek to another position, and confirm native playback progress updates. Across repeated attempts, playback must begin within three seconds of pressing play after audio is ready at least 95% of the time.
 4. Select five clearly numbered representative pages in the wrong order, using more than one picker action. Confirm every preview, position, filename, and extraction state is visible and upright.
 5. Time use of Move up and Move down to reach a specified order; the five-page reorder target is under 30 seconds. Remove one page, add it again, replace another, and confirm positions remain contiguous and the count follows each edit.
-6. Confirm and convert. Verify page-by-page extraction progress is announced and the spoken pages follow the displayed order. During a retry, confirm already-readable unchanged pages are not extracted again.
-7. Include a blank, badly blurred, or otherwise low-confidence page. Confirm the result enters attention rather than offering audio, identifies its page position, and offers Retry, Replace, and Remove. Use each recovery path in turn and confirm synthesis starts only when every retained page is readable.
-8. Interrupt one extraction, then use the page Retry or conversion Retry control. Interrupt speech synthesis, then use conversion Retry. Confirm the current page order and successful OCR results remain available, and no incomplete recording or download is offered.
-9. After successful multi-page conversion, play, pause, resume, seek, and listen through page boundaries. Confirm the recording matches the visible order.
-10. Confirm the download link appears only after completion. Download `textbook-reading.wav`, disconnect the phone from the LAN, and play the whole file in the phone's standard audio player.
-11. Reconnect and make each kind of page edit: add, replace, remove, and move. After each edit, confirm the old player and download disappear and a new conversion is required. Refresh the tab and confirm the temporary selection and result are discarded.
-12. Run ten timed 10-page trials with no more than 500 printed words per page on the target host. At least nine must produce a playable result within five minutes. Across 20 completed representative conversions, verify every in-browser and downloaded WAV plays from beginning to end.
-13. Run the complete phone flow with first-time users. At least 90% must select a page, convert it, and begin playback without assistance, and the average ease-of-use rating must be at least 4 out of 5.
+6. Select a representative two-column page and choose Duplicate. Crop one entry to each column using touch and keyboard controls; cancel once to confirm no change, then apply both crops. Reopen and reset one crop to confirm it restores the full source.
+7. Confirm and convert. Verify page-by-page extraction progress is announced and the columns are spoken once in displayed order. During a retry, confirm already-readable unchanged pages are not extracted again.
+8. Include a blank, badly blurred, or otherwise low-confidence page. Confirm the result enters attention rather than offering audio, identifies its page position, and offers Retry, Replace, and Remove. Use each recovery path in turn and confirm synthesis starts only when every retained page is readable.
+9. Interrupt one extraction, then use the page Retry or conversion Retry control. Interrupt speech synthesis, then use conversion Retry. Confirm the current page order and successful OCR results remain available, and no incomplete recording or download is offered.
+10. After successful multi-page conversion, play, pause, resume, seek, and listen through page boundaries. Confirm the recording matches the visible order.
+11. Confirm the download link appears only after completion. Download `textbook-reading.wav`, disconnect the phone from the LAN, and play the whole file in the phone's standard audio player.
+12. Reconnect and make each kind of page edit: add, replace, crop, duplicate, remove, and move. After each edit, confirm the old player and download disappear and a new conversion is required. Refresh the tab and confirm the temporary selection and result are discarded.
+13. Run ten timed 10-page trials with no more than 500 printed words per page on the target host. At least nine must produce a playable result within five minutes. Across 20 completed representative conversions, verify every in-browser and downloaded WAV plays from beginning to end.
+14. Run the complete phone flow with first-time users. At least 90% must select a page, convert it, and begin playback without assistance, and the average ease-of-use rating must be at least 4 out of 5.
 
 ## Limit And Failure Checks
 
 - With zero pages, confirm `Confirm and convert` is disabled and playback/download remain hidden.
 - With an existing selection, choose enough files in one picker action to exceed 20 total. Confirm none from that action are added, the existing selection is unchanged, and the message says how many must be removed.
+- At 20 entries, choose Duplicate and confirm the limit is announced without changing the session.
+- Move crop edges until fewer than 50 pixels remain and confirm Apply is unavailable and the validation is announced.
 - In the browser, try an original over 20 MiB, an undecodable or unsupported image, and an image whose normalized JPEG exceeds 4 MiB. Confirm each is rejected without changing an existing page. Send a valid JPEG over 2,400 px directly to `/api/extract` and confirm the API rejects it with `413`.
 - Send `/api/speech` zero pages, 21 pages, blank text, and combined text over 100,000 characters. Confirm it returns a structured `400` or `413` problem and no WAV.
 - Test EXIF-rotated, sideways, badly cropped, blank, and badly blurred pages. Confirm supported orientation is displayed upright and unreadable or partial results identify the affected position instead of producing audio.

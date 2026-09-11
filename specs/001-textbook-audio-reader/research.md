@@ -20,7 +20,7 @@
 
 ## Page Image Handling
 
-**Decision**: Let users choose multiple images and optionally invoke the rear camera through native file inputs. In the browser, decode orientation, downscale without upscaling to a 2,400 px long edge, and encode JPEG at approximately 90% quality before preview and upload. Accept originals up to 20 MiB and normalized JPEGs up to 4 MiB. Decode again with Pillow at the server boundary.
+**Decision**: Let users choose multiple images and optionally invoke the rear camera through native file inputs. In the browser, decode orientation, downscale without upscaling to a 2,400 px long edge, and encode JPEG at approximately 90% quality before preview and upload. Retain that normalized image as the tab-local source; derive each entry's OCR JPEG from an independent rectangular crop. Duplicate entries may share the immutable source. Accept originals up to 20 MiB and normalized JPEGs up to 4 MiB. Decode again with Pillow at the server boundary.
 
 **Rationale**: Phone photos can be much larger than OCR needs and may use HEIC. Browser normalization bakes displayed orientation into supported JPEG pixels and limits transfer size; server decoding verifies that untrusted bytes are a valid image. PaddleOCR then applies document orientation classification, text-image unwarping, and text-line orientation correction for photographed pages.
 
@@ -44,7 +44,7 @@
 
 ## Mobile Ordering And Playback
 
-**Decision**: Render previews in an ordered list with native Move up, Move down, and Remove buttons, controls at least 44 CSS pixels high, a visible page count, status announcements, and native `<audio controls>`. Use stable IDs and object URLs, revoking each URL when replaced, removed, or discarded.
+**Decision**: Render previews in an ordered list with native Move, Crop, Duplicate, and Remove buttons, controls at least 44 CSS pixels high, a visible page count, status announcements, and native `<audio controls>`. Use one native `<dialog>` with labeled range inputs for keyboard- and touch-operable edge trimming. Use stable IDs and object URLs, revoking each URL when replaced, removed, or discarded.
 
 **Rationale**: Buttons work with touch, mouse, keyboard, and assistive technology and satisfy the required non-drag alternative for sortable interfaces. Native media controls provide play, pause, resume, seek, and progress with less code than a custom player.
 
@@ -52,11 +52,11 @@
 
 ## Privacy, Errors, And Local Access
 
-**Decision**: Bind the service to the local network only, set `Cache-Control: no-store`, avoid logging images/text/audio, and return structured retryable errors. Keep uploads in request memory and speech only in a temporary file removed after transfer.
+**Decision**: Bind the service to the local network only, set `Cache-Control: no-store`, avoid logging images/text/audio, and return structured retryable errors. Keep uploads in request memory and retain completed speech files for seven days.
 
 **Rationale**: No page content or audio needs to leave the host. The first model downloads require internet access, but inference is offline after model caches are populated. Restricting the service to a trusted LAN or private overlay network avoids adding accounts while preventing other users from consuming local compute or viewing active content.
 
-**Alternatives considered**: Public deployment would require authentication, rate limiting, and stronger isolation. Browser-only inference improves host independence but shifts large downloads and compute to the phone. Persistent storage is unnecessary for tab-scoped sessions.
+**Alternatives considered**: Public deployment would require authentication, rate limiting, and stronger isolation. Browser-only inference improves host independence but shifts large downloads and compute to the phone. A database is unnecessary for seven-day filesystem retention.
 
 ## Sources
 
