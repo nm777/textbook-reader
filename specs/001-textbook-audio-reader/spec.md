@@ -81,7 +81,8 @@ As a reader, I want to download a completed recording so I can listen later with
 - **FR-013**: The system MUST preserve the selected page order when an interrupted conversion is retried during the same open session.
 - **FR-014**: The primary capture, ordering, conversion, playback, and download actions MUST be usable on a phone-sized screen without requiring a desktop-only interaction.
 - **FR-015**: The system MUST provide clear, actionable feedback when a photo is unsupported, a limit is exceeded, processing fails, or a download cannot be completed.
-- **FR-016**: The system MUST treat photos, extracted text, and generated audio as temporary session data and MUST NOT provide a persistent personal library.
+- **FR-016**: The system MUST keep photos and extracted text in the browser session and retain completed audio on the service for no more than seven days.
+- **FR-017**: Users MUST be able to list and redownload recordings that have not expired.
 
 ### Key Entities
 
@@ -106,9 +107,9 @@ As a reader, I want to download a completed recording so I can listen later with
 ## Assumptions
 
 - The project is for one person's private use, so accounts, sign-in, permissions, sharing, and multi-user collaboration are out of scope.
-- A conversion session is temporary. Refreshing or closing it may discard photos and results; users download recordings they want to keep.
+- A conversion session is temporary. Refreshing or closing it discards photos and browser results; completed recordings remain available from the service for seven days.
 - In-browser playback is the default outcome, and download is the only required offline capability.
 - The first release supports photographed pages containing primarily printed text in one language at a time. Handwriting, translation, and specialized interpretation of formulas, tables, or complex layouts are out of scope.
 - Users are responsible for taking sufficiently clear, well-lit, uncropped photos and for having permission to process the material.
-- Importing document files, editing extracted text, choosing voices, changing speech speed, and maintaining a saved conversion history are out of scope.
-- Conversion may require a network connection; only a previously downloaded recording is expected to work offline.
+- Importing document files, editing extracted text, choosing voices, and changing speech speed are out of scope.
+- Conversion and recording history require a network connection; only a previously downloaded recording is expected to work offline.

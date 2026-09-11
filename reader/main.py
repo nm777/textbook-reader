@@ -1,10 +1,12 @@
 """FastAPI application for local textbook OCR and speech synthesis."""
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from io import BytesIO
+from os import getenv
 from pathlib import Path
 from typing import Annotated, Literal
+from uuid import UUID
 
 import numpy as np
 from fastapi import FastAPI, File, Request, UploadFile
@@ -14,15 +16,17 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
-from starlette.background import BackgroundTask
 
-from reader import tts
+from reader import recordings, tts
 from reader.ocr import load_ocr
 
 
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_EDGE = 2_400
 STATIC_DIR = Path(__file__).with_name("static")
+RECORDINGS_DIR = Path(
+    getenv("RECORDINGS_DIR") or "~/.local/share/textbook-reader/recordings"
+).expanduser()
 _inference_lock = asyncio.Lock()
 
 
@@ -78,6 +82,7 @@ def _problem(
         "unsupported_image",
         "inference_failure",
         "model_unavailable",
+        "not_found",
     ],
     message: str,
     retryable: bool = False,
@@ -113,17 +118,30 @@ async def lifespan(app: FastAPI):
     app.state.ocr_load_error = None
     app.state.tts_load_error = None
 
+    await asyncio.to_thread(recordings.delete_expired, RECORDINGS_DIR)
+    cleanup_task = asyncio.create_task(_remove_expired_recordings())
     try:
-        app.state.ocr = await asyncio.to_thread(load_ocr)
-    except Exception as error:
-        app.state.ocr_load_error = error
+        try:
+            app.state.ocr = await asyncio.to_thread(load_ocr)
+        except Exception as error:
+            app.state.ocr_load_error = error
 
-    try:
-        await asyncio.to_thread(tts.initialize_pipeline)
-    except Exception as error:
-        app.state.tts_load_error = error
+        try:
+            await asyncio.to_thread(tts.initialize_pipeline)
+        except Exception as error:
+            app.state.tts_load_error = error
 
-    yield
+        yield
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
+
+
+async def _remove_expired_recordings() -> None:
+    while True:
+        await asyncio.sleep(60 * 60)
+        await asyncio.to_thread(recordings.delete_expired, RECORDINGS_DIR)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -160,6 +178,31 @@ async def request_validation_problem(
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/recordings/", include_in_schema=False)
+async def recordings_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "recordings.html")
+
+
+@app.get("/api/recordings")
+async def saved_recordings() -> JSONResponse:
+    items = await asyncio.to_thread(recordings.list_recordings, RECORDINGS_DIR)
+    return JSONResponse({"recordings": items})
+
+
+@app.get("/api/recordings/{recording_id}")
+async def download_recording(recording_id: UUID):
+    await asyncio.to_thread(recordings.delete_expired, RECORDINGS_DIR)
+    path = RECORDINGS_DIR / f"{recording_id.hex}.wav"
+    if not path.is_file():
+        return _problem(404, "not_found", "The recording was not found or has expired.")
+    return FileResponse(
+        path,
+        media_type="audio/wav",
+        filename=f"textbook-reading-{recording_id.hex[:8]}.wav",
+        content_disposition_type="attachment",
+    )
 
 
 @app.post("/api/extract")
@@ -233,14 +276,16 @@ async def create_speech(body: SpeechRequest):
     try:
         async with _inference_lock:
             path = await asyncio.to_thread(
-                tts.synthesize_pages, (page.text for page in body.pages)
+                tts.synthesize_pages,
+                (page.text for page in body.pages),
+                RECORDINGS_DIR,
             )
+            path = await asyncio.to_thread(recordings.retain, path, RECORDINGS_DIR)
         return FileResponse(
             path,
             media_type="audio/wav",
             filename="textbook-reading.wav",
             content_disposition_type="attachment",
-            background=BackgroundTask(tts.remove_wav, path),
         )
     except tts.TextTooLongError:
         if path is not None:

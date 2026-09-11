@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     volumes:
       - textbook-reader-models:/home/reader/.cache
+      - textbook-reader-recordings:/home/reader/recordings
     labels:
       traefik.enable: true
       traefik.docker.network: traefik_web
@@ -24,6 +25,8 @@ services:
 volumes:
   textbook-reader-models:
     name: textbook-reader-models
+  textbook-reader-recordings:
+    name: textbook-reader-recordings
 
 networks:
   traefik_web:

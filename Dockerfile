@@ -4,7 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PADDLE_DEVICE=cpu \
     PADDLE_PDX_CACHE_HOME=/home/reader/.cache/paddlex \
-    HF_HOME=/home/reader/.cache/huggingface
+    HF_HOME=/home/reader/.cache/huggingface \
+    RECORDINGS_DIR=/home/reader/recordings
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -25,7 +26,7 @@ RUN python -m pip install --no-cache-dir \
     && python -m pip install --no-cache-dir . \
     && python scripts/self_check.py \
     && useradd --create-home --uid 10001 reader \
-    && mkdir -p /home/reader/.cache \
+    && mkdir -p /home/reader/.cache /home/reader/recordings \
     && chown -R reader:reader /home/reader
 RUN python -m spacy download en_core_web_sm
 

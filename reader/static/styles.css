@@ -61,6 +61,16 @@ header p {
   font-size: clamp(1rem, 3vw, 1.2rem);
 }
 
+body > header nav {
+  margin-top: 1rem;
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+}
+
+body > header a {
+  color: #fffaf0;
+}
+
 main {
   width: min(100% - 3rem, 50rem);
   margin-inline: auto;
@@ -368,6 +378,33 @@ button:disabled {
 
 #audio-result {
   padding-bottom: 1rem;
+}
+
+#recordings-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.recording-card {
+  padding: 1rem;
+  background: var(--paper-light);
+  border: 1px solid var(--rule);
+  border-left: 0.3rem solid var(--navy);
+}
+
+.recording-card a {
+  color: var(--navy);
+  font-family: system-ui, sans-serif;
+  font-weight: 700;
+}
+
+.recording-card p {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-family: system-ui, sans-serif;
 }
 
 audio {

@@ -11,6 +11,9 @@
   <header>
     <h1>Textbook Audio Reader</h1>
     <p>Turn a photo of a textbook page into spoken audio.</p>
+    <nav aria-label="Recording history">
+      <a href="recordings/">Past recordings</a>
+    </nav>
   </header>
 
   <main>
@@ -23,8 +26,8 @@
       </div>
 
       <div>
-        <label for="camera-input">Take a photo with the rear camera</label>
-        <input id="camera-input" name="camera-photo" type="file" accept="image/*" capture="environment">
+        <button id="camera-button" type="button">Take a photo with the rear camera</button>
+        <input id="camera-input" name="camera-photo" type="file" accept="image/*" capture="environment" hidden>
       </div>
     </section>
 
@@ -60,6 +63,7 @@
     <div id="conversion-actions">
       <button id="convert-button" type="button" disabled>Confirm and convert</button>
       <button id="retry-button" type="button" hidden>Retry conversion</button>
+      <button id="clear-button" type="button" disabled>Clear pages and start over</button>
     </div>
 
     <section aria-labelledby="status-heading">

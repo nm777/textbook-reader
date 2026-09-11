@@ -87,13 +87,15 @@ def remove_wav(path: str | os.PathLike[str]) -> None:
     Path(path).unlink(missing_ok=True)
 
 
-def synthesize_pages(pages: Iterable[str]) -> Path:
+def synthesize_pages(
+    pages: Iterable[str], directory: str | os.PathLike[str] | None = None
+) -> Path:
     """Synthesize ordered pages into a caller-owned temporary WAV path."""
     text = assemble_page_text(pages)
     if _pipeline is None:
         raise RuntimeError("Kokoro pipeline has not been initialized")
 
-    descriptor, name = tempfile.mkstemp(suffix=".wav")
+    descriptor, name = tempfile.mkstemp(suffix=".wav", dir=directory)
     os.close(descriptor)
     path = Path(name)
     try:

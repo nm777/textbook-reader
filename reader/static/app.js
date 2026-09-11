@@ -6,6 +6,7 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 2400;
 
 const photoInput = document.querySelector("#photo-input");
+const cameraButton = document.querySelector("#camera-button");
 const cameraInput = document.querySelector("#camera-input");
 const pageCount = document.querySelector("#page-count");
 const previewEmpty = document.querySelector("#preview-empty");
@@ -13,6 +14,7 @@ const pageList = document.querySelector("#page-list");
 const pageTemplate = document.querySelector("#page-template");
 const convertButton = document.querySelector("#convert-button");
 const retryButton = document.querySelector("#retry-button");
+const clearButton = document.querySelector("#clear-button");
 const status = document.querySelector("#status");
 const audioResult = document.querySelector("#audio-result");
 const audioPlayer = document.querySelector("#audio-player");
@@ -94,6 +96,7 @@ function render() {
   convertButton.disabled = !pages.length || busy || stage !== "waiting";
   retryButton.hidden = !pages.length || (stage !== "attention" && stage !== "failed");
   retryButton.disabled = busy;
+  clearButton.disabled = !pages.length;
 }
 
 function setStage(nextStage, nextMessage) {
@@ -343,6 +346,15 @@ function removePage(page) {
   );
 }
 
+function startOver() {
+  if (!pages.length || !window.confirm("Clear all selected pages and audio? This cannot be undone.")) return;
+  stopCurrentOperation();
+  for (const page of pages) URL.revokeObjectURL(page.previewUrl);
+  pages.length = 0;
+  clearAudio();
+  setStage("waiting", "All pages were cleared. Add a page photo to begin again.");
+}
+
 async function responseProblem(response, fallback) {
   try {
     if (response.headers.get("content-type")?.includes("application/json")) {
@@ -508,10 +520,12 @@ function handlePageAction(event) {
 }
 
 photoInput.addEventListener("change", addImages);
+cameraButton.addEventListener("click", () => cameraInput.click());
 cameraInput.addEventListener("change", addImages);
 pageList.addEventListener("click", handlePageAction);
 convertButton.addEventListener("click", () => convert());
 retryButton.addEventListener("click", () => convert());
+clearButton.addEventListener("click", startOver);
 window.addEventListener("unload", () => {
   requestController?.abort();
   for (const page of pages) URL.revokeObjectURL(page.previewUrl);

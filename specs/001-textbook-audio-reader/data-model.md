@@ -24,7 +24,7 @@ waiting ──confirm──> extracting ──all readable──> synthesizing �
    └──────────── edit/retry from attention or failed ────────────┘
 ```
 
-Any page edit after completion discards and revokes the old recording, returning the session to `waiting`.
+Any page edit after completion discards and revokes the browser's old recording URL, returning the session to `waiting`; the server copy remains available for seven days.
 
 ## Page Photo
 
@@ -69,7 +69,7 @@ The combined speech input is derived, not stored separately: trim each readable 
 
 ## Audio Recording
 
-Represents the completed local speech response retained by the browser.
+Represents the completed local speech response retained by the browser and the server's seven-day download copy.
 
 | Field | Type | Rules |
 |-------|------|-------|
@@ -78,8 +78,11 @@ Represents the completed local speech response retained by the browser.
 | `filename` | string | `textbook-reading.wav` |
 | `duration` | number | Seconds reported by the media element after metadata loads |
 | `size` | integer | Response bytes; displayed before download when useful |
+| `id` | UUID | Opaque server-side download identifier |
+| `created_at` | datetime | Filesystem creation timestamp presented in the user's locale |
+| `expires_at` | datetime | Seven days after creation |
 
-During synthesis, the server owns one temporary WAV path. It is never exposed as a reusable URL and is deleted after the file response completes or immediately if synthesis fails.
+During synthesis, the server owns one temporary WAV path. A completed file receives an opaque ID, is available through the recordings endpoint, and is deleted after seven days; failed synthesis files are deleted immediately.
 
 ## Problem
 

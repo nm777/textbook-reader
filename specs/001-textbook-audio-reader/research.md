@@ -36,7 +36,7 @@
 
 ## Speech And Download
 
-**Decision**: Use Kokoro 0.9.4 with the American English pipeline and `af_heart` voice by default. Pass the ordered page text to its generator, let Kokoro split the input at paragraph boundaries, and append each generated 24 kHz audio array to one temporary WAV through SoundFile. Return that file and delete it after the response completes.
+**Decision**: Use Kokoro 0.9.4 with the American English pipeline and `af_heart` voice by default. Pass the ordered page text to its generator, let Kokoro split the input at paragraph boundaries, and append each generated 24 kHz audio array to one WAV through SoundFile. Retain completed files locally for seven days and delete failed or expired files.
 
 **Rationale**: Kokoro is an Apache-licensed 82M-parameter model designed for local inference. Its generator already yields bounded audio segments, and SoundFile can append them directly to one valid seekable WAV without manual headers, FFmpeg, or holding the full recording in memory. Language and voice stay configurable because they must match.
 

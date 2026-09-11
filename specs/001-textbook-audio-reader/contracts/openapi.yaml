@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Textbook Audio Reader API
   version: 1.0.0
-  description: Stateless local endpoints for one temporary browser session.
+  description: Local OCR, speech, and seven-day recording-retention endpoints.
 servers:
   - url: /
 paths:
@@ -76,7 +76,7 @@ paths:
                         minLength: 1
       responses:
         "200":
-          description: Complete local recording containing every supplied page in order.
+          description: Complete local recording containing every supplied page in order and retained for seven days.
           headers:
             Cache-Control:
               schema:
@@ -99,8 +99,67 @@ paths:
           $ref: "#/components/responses/InferenceFailure"
         "503":
           $ref: "#/components/responses/ModelUnavailable"
+  /api/recordings:
+    get:
+      summary: List unexpired recordings, newest first
+      operationId: listRecordings
+      responses:
+        "200":
+          description: Recordings available for download.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recordings]
+                properties:
+                  recordings:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Recording"
+  /api/recordings/{recording_id}:
+    get:
+      summary: Download an unexpired recording
+      operationId: downloadRecording
+      parameters:
+        - name: recording_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Saved WAV recording.
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Recording does not exist or has expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
+    Recording:
+      type: object
+      additionalProperties: false
+      required: [id, created_at, expires_at, size]
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        size:
+          type: integer
+          minimum: 1
     ExtractionResult:
       type: object
       additionalProperties: false
@@ -135,6 +194,7 @@ components:
             - unsupported_image
             - inference_failure
             - model_unavailable
+            - not_found
         message:
           type: string
         retryable:

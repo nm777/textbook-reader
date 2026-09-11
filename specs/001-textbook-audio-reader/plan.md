@@ -5,13 +5,13 @@
 
 ## Summary
 
-Build a mobile-first page served by one local Python process. The browser keeps selected textbook photos and their order in tab memory, while local endpoints extract each confirmed page with PaddleOCR and synthesize the ordered text with Kokoro. Both models load once when the service starts; no content leaves the local machine, no paid API credentials are required, and completed speech is returned as one playable and downloadable temporary WAV file.
+Build a mobile-first page served by one local Python process. The browser keeps selected textbook photos and their order in tab memory, while local endpoints extract each confirmed page with PaddleOCR and synthesize the ordered text with Kokoro. Both models load once when the service starts; no content leaves the local machine, no paid API credentials are required, and completed speech is returned as one playable WAV file retained locally for seven days.
 
 ## Technical Context
 
 **Language/Version**: Python 3.12; browser-native HTML, CSS, and JavaScript
 **Primary Dependencies**: FastAPI, Uvicorn, python-multipart, Pillow, PaddleOCR 3.7 with PP-OCRv6 medium, PaddlePaddle, Kokoro 0.9.4, NumPy, and SoundFile
-**Storage**: No database or object storage; tab-scoped browser memory and request-scoped temporary WAV files deleted after responses complete
+**Storage**: No database or object storage; tab-scoped browser memory and filesystem-backed WAV files automatically deleted after seven days
 **Testing**: No test framework; one Python `assert` smoke script, Python bytecode compilation, and manual mobile acceptance checks
 **Target Platform**: A private local Python service on a modern x86-64 or Apple Silicon computer with 16 GB RAM recommended; current mobile and desktop browsers, with phone-sized screens primary
 **Project Type**: Single-process local web application

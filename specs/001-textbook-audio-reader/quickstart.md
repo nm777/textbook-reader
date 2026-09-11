@@ -43,6 +43,7 @@ brew install espeak-ng libsndfile
    | `PADDLE_DEVICE` | `cpu` | Device string passed to PaddleOCR; it must be nonblank and valid for the installed PaddlePaddle build. |
    | `KOKORO_LANGUAGE` | `a` | Kokoro language code (`a` is American English). A blank value also uses `a`. |
    | `KOKORO_VOICE` | `af_heart` | Kokoro voice name. A blank value also uses `af_heart`. |
+   | `RECORDINGS_DIR` | `~/.local/share/textbook-reader/recordings` | Directory for completed WAV files retained for seven days. |
 
    For example, the defaults can be set explicitly with:
 
@@ -71,7 +72,7 @@ brew install espeak-ng libsndfile
 
 6. Open `http://localhost:8000` on the host or `http://HOST-LAN-IP:8000` on a phone connected to the same trusted network.
 
-Selected normalized JPEGs and OCR text live in the browser tab until their pages are replaced or removed, or the tab is refreshed or closed. The completed audio blob is discarded after any page edit or when the tab ends. An upload exists only for its request and is closed after being read. Speech synthesis uses one file in the host's system temporary directory and deletes it after the response finishes, or immediately after synthesis failure. A WAV explicitly downloaded to the phone is persistent and must be deleted by the user when no longer wanted.
+Selected normalized JPEGs and OCR text live in the browser tab until their pages are replaced or removed, or the tab is refreshed or closed. The completed browser audio blob is discarded after any page edit or when the tab ends. An upload exists only for its request and is closed after being read. Completed WAV files remain in `RECORDINGS_DIR` (default `~/.local/share/textbook-reader/recordings`) for redownload from the Past recordings page and are automatically deleted after seven days. A WAV explicitly downloaded to the phone is persistent and must be deleted by the user when no longer wanted.
 
 ## Docker Setup
 
@@ -89,14 +90,15 @@ Run it with one persistent model-cache volume and about 16 GB of memory availabl
 docker run --rm --name textbook-reader \
   -p 8000:8000 \
   -v textbook-reader-models:/home/reader/.cache \
+  -v textbook-reader-recordings:/home/reader/recordings \
   textbook-reader
 ```
 
-The first start downloads the PaddleOCR and Kokoro models into `textbook-reader-models`; later containers reuse them. Open `http://localhost:8000` on the host or `http://HOST-LAN-IP:8000` from a phone on the same trusted LAN. The image targets Linux `amd64` CPU execution; GPU use requires a different PaddlePaddle package and container runtime and is not part of this setup.
+The first start downloads the PaddleOCR and Kokoro models into `textbook-reader-models`; later containers reuse them. Completed recordings use the separate `textbook-reader-recordings` volume and expire after seven days. Open `http://localhost:8000` on the host or `http://HOST-LAN-IP:8000` from a phone on the same trusted LAN. The image targets Linux `amd64` CPU execution; GPU use requires a different PaddlePaddle package and container runtime and is not part of this setup.
 
 ### Docker Compose and private Traefik
 
-The Compose configuration builds the app, reuses the model-cache volume, and connects it to the existing `traefik_web` network. It does not publish the app port. Traefik accepts only loopback, private-network, and Tailscale client addresses for this route.
+The Compose configuration builds the app, reuses the model-cache and recording volumes, and connects it to the existing `traefik_web` network. It does not publish the app port. Traefik accepts only loopback, private-network, and Tailscale client addresses for this route.
 
 The LAN dnsdist resolver at `192.168.0.91` provides `morris.private A 192.168.0.111`. Clients receiving that resolver through DHCP need no hosts-file entry. An `/etc/hosts` entry on a client is only a fallback when it does not use the LAN resolver:
 
@@ -110,7 +112,7 @@ Build and start the app:
 docker compose up --build -d
 ```
 
-Open `https://morris.private/textbook-reader/`. The existing Traefik redirects HTTP to HTTPS globally. Since public certificate authorities cannot issue a certificate for `.private`, clients must trust the proxy's local certificate; alternatively, install a private-CA certificate in the shared Traefik configuration. Use `docker compose logs -f app` to follow the initial model downloads and `docker compose down` to stop the app without deleting its model cache.
+Open `https://morris.private/textbook-reader/`. The existing Traefik redirects HTTP to HTTPS globally. Since public certificate authorities cannot issue a certificate for `.private`, clients must trust the proxy's local certificate; alternatively, install a private-CA certificate in the shared Traefik configuration. Use `docker compose logs -f app` to follow the initial model downloads and `docker compose down` to stop the app without deleting its model or recording volumes.
 
 ## Smoke Check
 
@@ -121,7 +123,7 @@ python3 -m compileall reader scripts
 python3 scripts/self_check.py
 ```
 
-The assertion script requires the installed `numpy` and `SoundFile` packages plus the system `libsndfile` library. It verifies ordered text assembly, incremental 24 kHz mono WAV writing, and temporary-file removal without loading PaddleOCR or Kokoro. A missing-module or shared-library error means the declared setup dependency is absent; it is separate from live-model acceptance.
+The assertion script requires the installed `numpy` and `SoundFile` packages plus the system `libsndfile` library. It verifies ordered text assembly, incremental 24 kHz mono WAV writing, recording retention, and seven-day expiration without loading PaddleOCR or Kokoro. A missing-module or shared-library error means the declared setup dependency is absent; it is separate from live-model acceptance.
 
 With the service running, smoke-check the page and both live routes. The OCR input here must already be a valid JPEG no larger than 4 MiB or 2,400 px on its longest edge; the browser normally performs that normalization.
 
