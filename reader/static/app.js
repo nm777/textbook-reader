@@ -102,6 +102,16 @@ function setStage(nextStage, nextMessage) {
   render();
 }
 
+function formatDuration(milliseconds) {
+  const totalSeconds = Math.max(1, Math.round(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return [
+    minutes ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}` : "",
+    seconds ? `${seconds} ${seconds === 1 ? "second" : "seconds"}` : "",
+  ].filter(Boolean).join(" ");
+}
+
 function clearAudio() {
   audioDownload.removeAttribute("href");
   audioDownload.hidden = true;
@@ -367,7 +377,7 @@ async function extract(page, currentOperation, signal) {
 
   const body = new FormData();
   body.append("image", page.image, "page.jpg");
-  const response = await fetch("/api/extract", { method: "POST", body, signal });
+  const response = await fetch("api/extract", { method: "POST", body, signal });
   if (!response.ok) {
     throw new Error(await responseProblem(response, `Page ${position} could not be processed`));
   }
@@ -407,7 +417,7 @@ async function synthesize(orderedPages, signal) {
     "synthesizing",
     `Creating audio from ${orderedPages.length} ${orderedPages.length === 1 ? "page" : "pages"}...`,
   );
-  const response = await fetch("/api/speech", {
+  const response = await fetch("api/speech", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pages: orderedPages }),
@@ -430,6 +440,7 @@ async function convert(retryPage = null) {
   if (!pages.length || preparing || requestController || (retryPage && !pages.includes(retryPage))) return;
 
   const currentOperation = ++operation;
+  const startedAt = performance.now();
   requestController = new AbortController();
   const { signal } = requestController;
   let currentPage = null;
@@ -460,7 +471,9 @@ async function convert(retryPage = null) {
     audioResult.hidden = false;
     setStage(
       "complete",
-      `${pages.length} ${pages.length === 1 ? "page is" : "pages are"} complete. Use the audio controls to play, pause, or seek.`,
+      `${pages.length} ${pages.length === 1 ? "page is" : "pages are"} complete in ${
+        formatDuration(performance.now() - startedAt)
+      }. Use the audio controls to play, pause, or seek.`,
     );
   } catch (error) {
     if (currentOperation !== operation || error?.name === "AbortError") return;

@@ -1,0 +1,30 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - textbook-reader-models:/home/reader/.cache
+    labels:
+      traefik.enable: true
+      traefik.docker.network: traefik_web
+      traefik.http.routers.textbook-reader.rule: Host(`morris.private`) && (Path(`/textbook-reader`) || PathPrefix(`/textbook-reader/`))
+      traefik.http.routers.textbook-reader.entrypoints: websecure
+      traefik.http.routers.textbook-reader.tls: true
+      traefik.http.routers.textbook-reader.middlewares: textbook-reader-private,textbook-reader-slash,textbook-reader-strip
+      traefik.http.routers.textbook-reader.service: textbook-reader
+      traefik.http.middlewares.textbook-reader-private.ipallowlist.sourcerange: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,100.64.0.0/10,::1/128,fc00::/7,fe80::/10
+      traefik.http.middlewares.textbook-reader-slash.redirectregex.regex: ^(https?://[^/]+)/textbook-reader$$
+      traefik.http.middlewares.textbook-reader-slash.redirectregex.replacement: $${1}/textbook-reader/
+      traefik.http.middlewares.textbook-reader-slash.redirectregex.permanent: true
+      traefik.http.middlewares.textbook-reader-strip.stripprefix.prefixes: /textbook-reader
+      traefik.http.services.textbook-reader.loadbalancer.server.port: 8000
+    networks:
+      - traefik_web
+
+volumes:
+  textbook-reader-models:
+    name: textbook-reader-models
+
+networks:
+  traefik_web:
+    external: true

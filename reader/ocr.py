@@ -47,6 +47,8 @@ def load_ocr() -> OCR:
         use_textline_orientation=True,
         text_rec_score_thresh=0.0,
         device=device,
+        # PaddlePaddle 3.3's oneDNN executor cannot run the PP-OCRv6 graph.
+        enable_mkldnn=False,
     )
     return OCR(model, min_confidence)
 

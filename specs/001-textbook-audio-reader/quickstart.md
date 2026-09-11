@@ -73,6 +73,45 @@ brew install espeak-ng libsndfile
 
 Selected normalized JPEGs and OCR text live in the browser tab until their pages are replaced or removed, or the tab is refreshed or closed. The completed audio blob is discarded after any page edit or when the tab ends. An upload exists only for its request and is closed after being read. Speech synthesis uses one file in the host's system temporary directory and deletes it after the response finishes, or immediately after synthesis failure. A WAV explicitly downloaded to the phone is persistent and must be deleted by the user when no longer wanted.
 
+## Docker Setup
+
+The CPU container needs no camera, audio, or GPU device access. The phone browser captures photos and receives the generated WAV over HTTP.
+
+Build the image:
+
+```bash
+docker build -t textbook-reader .
+```
+
+Run it with one persistent model-cache volume and about 16 GB of memory available:
+
+```bash
+docker run --rm --name textbook-reader \
+  -p 8000:8000 \
+  -v textbook-reader-models:/home/reader/.cache \
+  textbook-reader
+```
+
+The first start downloads the PaddleOCR and Kokoro models into `textbook-reader-models`; later containers reuse them. Open `http://localhost:8000` on the host or `http://HOST-LAN-IP:8000` from a phone on the same trusted LAN. The image targets Linux `amd64` CPU execution; GPU use requires a different PaddlePaddle package and container runtime and is not part of this setup.
+
+### Docker Compose and private Traefik
+
+The Compose configuration builds the app, reuses the model-cache volume, and connects it to the existing `traefik_web` network. It does not publish the app port. Traefik accepts only loopback, private-network, and Tailscale client addresses for this route.
+
+The LAN dnsdist resolver at `192.168.0.91` provides `morris.private A 192.168.0.111`. Clients receiving that resolver through DHCP need no hosts-file entry. An `/etc/hosts` entry on a client is only a fallback when it does not use the LAN resolver:
+
+```text
+192.168.0.111 morris.private
+```
+
+Build and start the app:
+
+```bash
+docker compose up --build -d
+```
+
+Open `https://morris.private/textbook-reader/`. The existing Traefik redirects HTTP to HTTPS globally. Since public certificate authorities cannot issue a certificate for `.private`, clients must trust the proxy's local certificate; alternatively, install a private-CA certificate in the shared Traefik configuration. Use `docker compose logs -f app` to follow the initial model downloads and `docker compose down` to stop the app without deleting its model cache.
+
 ## Smoke Check
 
 Compile the Python sources, then run the model-independent assertion script:
