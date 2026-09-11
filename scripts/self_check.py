@@ -13,8 +13,10 @@ from reader.tts import assemble_page_text, remove_wav, write_wav
 
 
 def main() -> None:
-    assert assemble_page_text(["  First page\nline two  ", "\tSecond page\n"]) == (
-        "First page\nline two\n\nSecond page"
+    assert assemble_page_text(
+        ["  First page\nline two\n\nNew paragraph  ", "\tSecond page\n"]
+    ) == (
+        "First page line two\n\nNew paragraph\n\nSecond page"
     )
 
     with tempfile.TemporaryDirectory() as directory:

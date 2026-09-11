@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Any
 
@@ -20,7 +21,14 @@ class TextTooLongError(ValueError):
 
 def assemble_page_text(pages: Iterable[str]) -> str:
     """Trim and join page text in its supplied order."""
-    trimmed_pages = [page.strip() for page in pages]
+    trimmed_pages = [
+        re.sub(
+            r"(?<!\n)\n(?!\n)",
+            " ",
+            page.strip().replace("\r\n", "\n").replace("\r", "\n"),
+        )
+        for page in pages
+    ]
     if not any(trimmed_pages):
         raise ValueError("Speech text must contain at least one character")
     text = "\n\n".join(trimmed_pages)
