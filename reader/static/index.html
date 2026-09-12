@@ -92,14 +92,22 @@
     <canvas id="crop-preview" aria-label="Preview of the cropped page"></canvas>
     <fieldset id="crop-controls">
       <legend>Edge trims</legend>
-      <label for="crop-top">Top: <output id="crop-top-value" for="crop-top">0%</output></label>
-      <input id="crop-top" data-crop-edge="top" type="range" min="0" max="95" value="0">
-      <label for="crop-right">Right: <output id="crop-right-value" for="crop-right">0%</output></label>
-      <input id="crop-right" data-crop-edge="right" type="range" min="0" max="95" value="0">
-      <label for="crop-bottom">Bottom: <output id="crop-bottom-value" for="crop-bottom">0%</output></label>
-      <input id="crop-bottom" data-crop-edge="bottom" type="range" min="0" max="95" value="0">
-      <label for="crop-left">Left: <output id="crop-left-value" for="crop-left">0%</output></label>
-      <input id="crop-left" data-crop-edge="left" type="range" min="0" max="95" value="0">
+      <div class="crop-control">
+        <label for="crop-top">Top: <output id="crop-top-value" for="crop-top">0%</output></label>
+        <input id="crop-top" data-crop-edge="top" type="range" min="0" max="95" value="0">
+      </div>
+      <div class="crop-control">
+        <label for="crop-right">Right: <output id="crop-right-value" for="crop-right">0%</output></label>
+        <input id="crop-right" data-crop-edge="right" type="range" min="0" max="95" value="0">
+      </div>
+      <div class="crop-control">
+        <label for="crop-bottom">Bottom: <output id="crop-bottom-value" for="crop-bottom">0%</output></label>
+        <input id="crop-bottom" data-crop-edge="bottom" type="range" min="0" max="95" value="0">
+      </div>
+      <div class="crop-control">
+        <label for="crop-left">Left: <output id="crop-left-value" for="crop-left">0%</output></label>
+        <input id="crop-left" data-crop-edge="left" type="range" min="0" max="95" value="0">
+      </div>
     </fieldset>
     <p id="crop-error" role="alert"></p>
     <div class="dialog-actions">
