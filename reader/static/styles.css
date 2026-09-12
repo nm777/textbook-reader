@@ -132,6 +132,17 @@ input[type="file"] {
   font-size: 0.875rem;
 }
 
+input[type="text"] {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--ink);
+  background: var(--paper-light);
+  border: 1px solid #948b79;
+  border-radius: 0.35rem;
+  font-family: system-ui, sans-serif;
+}
+
 input[type="file"]::file-selector-button {
   min-height: 2.875rem;
   margin-right: 0.75rem;
@@ -373,6 +384,10 @@ dialog h2 {
   border-top: 0.2rem solid var(--ink);
 }
 
+#recording-name-field {
+  flex: 1;
+}
+
 button {
   min-width: 2.75rem;
   min-height: 2.75rem;
@@ -483,8 +498,27 @@ button:disabled {
   font-family: system-ui, sans-serif;
 }
 
-.recording-card button {
+.recording-card > button {
   margin-top: 0.75rem;
+}
+
+.recording-name-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.recording-name-form label {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.recording-name-form button {
+  margin: 0;
+  color: var(--navy);
+  background: transparent;
+  border-color: var(--navy);
 }
 
 audio {
@@ -556,6 +590,12 @@ audio {
 
   #conversion-actions {
     flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  #recording-name-field {
+    flex-basis: 100%;
   }
 
   #conversion-actions button {

@@ -83,10 +83,11 @@ Represents the completed local speech response retained by the browser and the s
 | `duration` | number | Seconds reported by the media element after metadata loads |
 | `size` | integer | Response bytes; displayed before download when useful |
 | `id` | UUID | Opaque server-side download identifier |
+| `name` | string or null | Optional user-supplied display name, at most 100 characters |
 | `created_at` | datetime | Filesystem creation timestamp presented in the user's locale |
 | `expires_at` | datetime | Seven days after creation |
 
-During synthesis, the server owns one temporary WAV path. A completed file receives an opaque ID, is available through the recordings endpoint, and is deleted after seven days; failed synthesis files are deleted immediately.
+During synthesis, the server owns one temporary WAV path. A completed file receives an opaque ID and an optional `.name` sidecar, is available through the recordings endpoint, and is deleted after seven days; failed synthesis files are deleted immediately.
 
 ## Problem
 

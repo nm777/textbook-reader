@@ -58,6 +58,10 @@ paths:
               additionalProperties: false
               required: [pages]
               properties:
+                name:
+                  type: [string, "null"]
+                  maxLength: 100
+                  description: Optional display name; surrounding and repeated whitespace is removed.
                 pages:
                   type: array
                   minItems: 1
@@ -141,6 +145,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    patch:
+      summary: Set or remove a recording's display name
+      operationId: nameRecording
+      parameters:
+        - name: recording_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name:
+                  type: [string, "null"]
+                  maxLength: 100
+      responses:
+        "204":
+          description: Recording name updated.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/TooLarge"
+        "404":
+          description: Recording does not exist or has expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
     delete:
       summary: Permanently delete a recording
       operationId: deleteRecording
@@ -165,11 +204,14 @@ components:
     Recording:
       type: object
       additionalProperties: false
-      required: [id, created_at, expires_at, size]
+      required: [id, name, created_at, expires_at, size]
       properties:
         id:
           type: string
           format: uuid
+        name:
+          type: [string, "null"]
+          maxLength: 100
         created_at:
           type: string
           format: date-time

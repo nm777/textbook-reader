@@ -23,6 +23,7 @@ from reader.ocr import load_ocr
 
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_EDGE = 2_400
+MAX_RECORDING_NAME_LENGTH = 100
 STATIC_DIR = Path(__file__).with_name("static")
 RECORDINGS_DIR = Path(
     getenv("RECORDINGS_DIR") or "~/.local/share/textbook-reader/recordings"
@@ -48,6 +49,12 @@ class SpeechRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pages: list[SpeechPage] = Field(min_length=1, max_length=20)
+    name: str | None = Field(default=None, max_length=MAX_RECORDING_NAME_LENGTH)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        return None if value is None else (" ".join(value.split()) or None)
 
     @model_validator(mode="after")
     def enforce_combined_text_limit(self) -> "SpeechRequest":
@@ -59,6 +66,17 @@ class SpeechRequest(BaseModel):
                 "Combined page text cannot exceed 100,000 characters",
             ) from error
         return self
+
+
+class RecordingNameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(max_length=MAX_RECORDING_NAME_LENGTH)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        return None if value is None else (" ".join(value.split()) or None)
 
 
 class ImageTooLargeError(ValueError):
@@ -159,7 +177,7 @@ async def request_validation_problem(
     request: Request, error: RequestValidationError
 ) -> JSONResponse:
     too_large = any(
-        item["type"] in {"too_long", "combined_text_too_large"}
+        item["type"] in {"too_long", "string_too_long", "combined_text_too_large"}
         for item in error.errors()
     )
     if too_large:
@@ -208,9 +226,15 @@ async def download_recording(recording_id: UUID):
 @app.delete("/api/recordings/{recording_id}", status_code=204)
 async def delete_recording(recording_id: UUID):
     path = RECORDINGS_DIR / f"{recording_id.hex}.wav"
-    try:
-        await asyncio.to_thread(path.unlink)
-    except FileNotFoundError:
+    if not await asyncio.to_thread(recordings.remove, path):
+        return _problem(404, "not_found", "The recording was not found or has expired.")
+    return Response(status_code=204)
+
+
+@app.patch("/api/recordings/{recording_id}", status_code=204)
+async def name_recording(recording_id: UUID, body: RecordingNameRequest):
+    path = RECORDINGS_DIR / f"{recording_id.hex}.wav"
+    if not await asyncio.to_thread(recordings.set_name, path, body.name):
         return _problem(404, "not_found", "The recording was not found or has expired.")
     return Response(status_code=204)
 
@@ -290,7 +314,9 @@ async def create_speech(body: SpeechRequest):
                 (page.text for page in body.pages),
                 RECORDINGS_DIR,
             )
-            path = await asyncio.to_thread(recordings.retain, path, RECORDINGS_DIR)
+            path = await asyncio.to_thread(
+                recordings.retain, path, RECORDINGS_DIR, body.name
+            )
         return FileResponse(
             path,
             media_type="audio/wav",

@@ -87,6 +87,7 @@ As a reader, I want to download a completed recording so I can listen later with
 - **FR-017**: Users MUST be able to list and redownload recordings that have not expired.
 - **FR-018**: Users MUST be able to revise, reset, apply, or cancel a rectangular crop independently for each page entry using touch and keyboard controls.
 - **FR-019**: Users MUST be able to duplicate a page entry directly after it with a fresh identity and extraction state.
+- **FR-020**: Users MUST be able to give a recording an optional name during creation and change or remove that name from recording history.
 
 ### Key Entities
 

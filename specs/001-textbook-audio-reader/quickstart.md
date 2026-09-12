@@ -72,7 +72,7 @@ brew install espeak-ng libsndfile
 
 6. Open `http://localhost:8000` on the host or `http://HOST-LAN-IP:8000` on a phone connected to the same trusted network.
 
-Selected normalized source JPEGs, crops, and OCR text live in the browser tab until their pages are replaced or removed, or the tab is refreshed or closed. Duplicate entries share an immutable source without another upload until conversion. The completed browser audio blob is discarded after any page edit or when the tab ends. An upload exists only for its request and is closed after being read. Completed WAV files remain in `RECORDINGS_DIR` (default `~/.local/share/textbook-reader/recordings`) for redownload from the Past recordings page and are automatically deleted after seven days. A WAV explicitly downloaded to the phone is persistent and must be deleted by the user when no longer wanted.
+Selected normalized source JPEGs, crops, and OCR text live in the browser tab until their pages are replaced or removed, or the tab is refreshed or closed. Duplicate entries share an immutable source without another upload until conversion. The completed browser audio blob is discarded after any page edit or when the tab ends. An upload exists only for its request and is closed after being read. Completed WAV files and optional user-supplied names remain in `RECORDINGS_DIR` (default `~/.local/share/textbook-reader/recordings`) for redownload from the Past recordings page and are automatically deleted after seven days. A WAV explicitly downloaded to the phone is persistent and must be deleted by the user when no longer wanted.
 
 ## Docker Setup
 

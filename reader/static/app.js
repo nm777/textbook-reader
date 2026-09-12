@@ -13,6 +13,7 @@ const pageCount = document.querySelector("#page-count");
 const previewEmpty = document.querySelector("#preview-empty");
 const pageList = document.querySelector("#page-list");
 const pageTemplate = document.querySelector("#page-template");
+const recordingNameInput = document.querySelector("#recording-name");
 const convertButton = document.querySelector("#convert-button");
 const retryButton = document.querySelector("#retry-button");
 const clearButton = document.querySelector("#clear-button");
@@ -109,6 +110,7 @@ function render() {
   }));
 
   convertButton.disabled = !pages.length || busy || stage !== "waiting";
+  recordingNameInput.disabled = busy || stage === "complete";
   retryButton.hidden = !pages.length || (stage !== "attention" && stage !== "failed");
   retryButton.disabled = busy;
   clearButton.disabled = !pages.length;
@@ -542,6 +544,7 @@ function startOver() {
   stopCurrentOperation();
   for (const page of pages) URL.revokeObjectURL(page.previewUrl);
   pages.length = 0;
+  recordingNameInput.value = "";
   clearAudio();
   setStage("waiting", "All pages were cleared. Add a page photo to begin again.");
 }
@@ -615,7 +618,7 @@ function attentionMessage() {
   } attention. Retry, replace, or remove ${positions.length === 1 ? "it" : "them"} before creating audio.`;
 }
 
-async function synthesize(orderedPages, signal) {
+async function synthesize(orderedPages, name, signal) {
   setStage(
     "synthesizing",
     `Creating audio from ${orderedPages.length} ${orderedPages.length === 1 ? "page" : "pages"}...`,
@@ -623,7 +626,7 @@ async function synthesize(orderedPages, signal) {
   const response = await fetch("api/speech", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pages: orderedPages }),
+    body: JSON.stringify({ pages: orderedPages, name: name || null }),
     signal,
   });
   if (!response.ok) {
@@ -665,12 +668,15 @@ async function convert(retryPage = null) {
     }
 
     const orderedPages = pages.map((page) => ({ id: page.id, text: page.text }));
-    const recording = await synthesize(orderedPages, signal);
+    const recordingName = recordingNameInput.value.replace(/\s+/g, " ").trim();
+    recordingNameInput.value = recordingName;
+    const recording = await synthesize(orderedPages, recordingName, signal);
     if (currentOperation !== operation || signal.aborted) return;
 
     clearAudio();
     audioUrl = URL.createObjectURL(recording);
     audioPlayer.src = audioUrl;
+    audioDownload.download = recordingName ? `${recordingName}.wav` : "textbook-reading.wav";
     audioResult.hidden = false;
     setStage(
       "complete",
