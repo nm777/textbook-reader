@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,16 +21,21 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY pyproject.toml ./
-COPY reader/ reader/
-COPY scripts/ scripts/
-RUN python -m pip install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -c 'import tomllib; print("\n".join(tomllib.load(open("pyproject.toml", "rb"))["project"]["dependencies"]))' > /tmp/requirements.txt \
+    && python -m pip install \
         --index-url https://download.pytorch.org/whl/cpu torch \
-    && python -m pip install --no-cache-dir . \
-    && python scripts/self_check.py \
-    && useradd --create-home --uid 10001 reader \
+    && python -m pip install -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m spacy download en_core_web_sm
+RUN useradd --create-home --uid 10001 reader \
     && mkdir -p /home/reader/.cache /home/reader/recordings \
     && chown -R reader:reader /home/reader
-RUN python -m spacy download en_core_web_sm
+
+COPY reader/ reader/
+COPY scripts/self_check.py scripts/self_check.py
+RUN python scripts/self_check.py
 
 USER reader
 

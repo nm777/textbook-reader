@@ -8,7 +8,7 @@ services:
     labels:
       traefik.enable: true
       traefik.docker.network: traefik_web
-      traefik.http.routers.textbook-reader.rule: Host(`morris.private`) && (Path(`/textbook-reader`) || PathPrefix(`/textbook-reader/`))
+      traefik.http.routers.textbook-reader.rule: (Host(`nate-desktop`) || Host(`nate-desktop.tail1fc587.ts.net`) || Host(`morris.private`)) && (Path(`/textbook-reader`) || PathPrefix(`/textbook-reader/`))
       traefik.http.routers.textbook-reader.entrypoints: websecure
       traefik.http.routers.textbook-reader.tls: true
       traefik.http.routers.textbook-reader.middlewares: textbook-reader-private,textbook-reader-slash,textbook-reader-strip
