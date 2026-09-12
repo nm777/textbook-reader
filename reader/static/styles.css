@@ -483,6 +483,10 @@ button:disabled {
   font-family: system-ui, sans-serif;
 }
 
+.recording-card button {
+  margin-top: 0.75rem;
+}
+
 audio {
   display: block;
   width: 100%;

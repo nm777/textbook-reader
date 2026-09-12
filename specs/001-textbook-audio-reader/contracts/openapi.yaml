@@ -141,6 +141,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    delete:
+      summary: Permanently delete a recording
+      operationId: deleteRecording
+      parameters:
+        - name: recording_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Recording deleted.
+        "404":
+          description: Recording does not exist or has expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
 components:
   schemas:
     Recording:

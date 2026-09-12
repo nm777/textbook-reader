@@ -11,7 +11,7 @@ from uuid import UUID
 import numpy as np
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -203,6 +203,16 @@ async def download_recording(recording_id: UUID):
         filename=f"textbook-reading-{recording_id.hex[:8]}.wav",
         content_disposition_type="attachment",
     )
+
+
+@app.delete("/api/recordings/{recording_id}", status_code=204)
+async def delete_recording(recording_id: UUID):
+    path = RECORDINGS_DIR / f"{recording_id.hex}.wav"
+    try:
+        await asyncio.to_thread(path.unlink)
+    except FileNotFoundError:
+        return _problem(404, "not_found", "The recording was not found or has expired.")
+    return Response(status_code=204)
 
 
 @app.post("/api/extract")

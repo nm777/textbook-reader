@@ -82,6 +82,10 @@ def main() -> None:
             assert download.status_code == 200
             assert download.content == b"fresh"
             assert client.get(f"/api/recordings/{UUID(int=0)}").status_code == 404
+            deleted = client.delete(f"/api/recordings/{saved[0]['id']}")
+            assert deleted.status_code == 204
+            assert not fresh.exists()
+            assert client.delete(f"/api/recordings/{saved[0]['id']}").status_code == 404
 
     print("self-check passed")
 
