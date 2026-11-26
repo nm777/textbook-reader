@@ -1,15 +1,20 @@
 """Minimal model-independent API and static-shell smoke checks."""
 
+from io import BytesIO
 from pathlib import Path
+import json
 import os
 import sys
 import tempfile
+from threading import Event
 import time
+from types import SimpleNamespace
 from uuid import UUID
 import wave
 
 import numpy as np
 from fastapi.testclient import TestClient
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -46,6 +51,22 @@ def main() -> None:
             remove_wav(path)
         assert not path.exists()
 
+        progress = []
+        original_pipeline = reader_app.tts._pipeline
+        reader_app.tts._pipeline = lambda text, voice: iter([
+            SimpleNamespace(graphemes="First", audio=chunks[0]),
+            SimpleNamespace(graphemes="Second", audio=chunks[1]),
+        ])
+        try:
+            generated = reader_app.tts.synthesize_pages(
+                ["FirstSecond"], directory,
+                lambda done, total: progress.append((done, total)),
+            )
+            assert progress == [(5, 11), (11, 11)]
+            remove_wav(generated)
+        finally:
+            reader_app.tts._pipeline = original_pipeline
+
         pending = Path(directory) / "pending.wav"
         pending.write_bytes(b"fresh")
         fresh = retain(pending, Path(directory), "Existing recording")
@@ -64,11 +85,28 @@ def main() -> None:
         assert not stale.with_suffix(".name").exists()
 
         reader_app.RECORDINGS_DIR = Path(directory)
-        reader_app.load_ocr = lambda: object()
+        class FakeOcr:
+            def extract(self, pixels):
+                assert pixels.shape == (1, 1, 3)
+                return {
+                    "status": "readable",
+                    "text": "Readable text",
+                    "confidence": 1,
+                    "issues": [],
+                }
+
+        reader_app.load_ocr = FakeOcr
         reader_app.tts.initialize_pipeline = lambda: None
 
-        def synthesize_pages(texts, output_directory):
+        audio_started = Event()
+        finish_audio = Event()
+
+        def synthesize_pages(texts, output_directory, progress=None):
             assert list(texts) == ["Readable text"]
+            if progress is not None:
+                progress(6, 13)
+                audio_started.set()
+                assert finish_audio.wait(5), "Timed out waiting to inspect conversion progress"
             generated = Path(output_directory) / "generated.wav"
             generated.write_bytes(b"speech")
             return generated
@@ -84,6 +122,10 @@ def main() -> None:
                     'data-action="duplicate"',
                     'id="crop-dialog"',
                     'id="recording-name"',
+                    'id="text-input"',
+                    'id="add-text-button"',
+                    'id="progress-bar"',
+                    'id="progress-details"',
                 )
             )
             assert client.get("/recordings/").status_code == 200
@@ -129,6 +171,44 @@ def main() -> None:
             assert not fresh.exists()
             assert not fresh.with_suffix(".name").exists()
             assert client.delete(f"/api/recordings/{saved[0]['id']}").status_code == 404
+
+            job_id = "11111111-1111-1111-1111-111111111111"
+            jpeg = BytesIO()
+            Image.new("RGB", (1, 1), "white").save(jpeg, "JPEG")
+            manifest = json.dumps(
+                {
+                    "id": job_id,
+                    "name": "Recovered job",
+                    "pages": [{"id": "page-1", "kind": "image"}],
+                }
+            )
+            started = client.post(
+                "/api/jobs",
+                data={"manifest": manifest},
+                files={"images": ("page.jpg", jpeg.getvalue(), "image/jpeg")},
+            )
+            assert started.status_code == 202
+            try:
+                assert audio_started.wait(5)
+                job = client.get(f"/api/jobs/{job_id}").json()
+                assert job["status"] == "synthesizing"
+                assert 20 < job["progress_percent"] < 100
+                assert job["remaining_seconds"] > 0
+            finally:
+                finish_audio.set()
+            for _ in range(100):
+                job = client.get(f"/api/jobs/{job_id}").json()
+                if job["status"] == "complete":
+                    break
+                time.sleep(0.01)
+            assert job["status"] == "complete"
+            assert job["progress_percent"] == 100
+            assert job["remaining_seconds"] == 0
+            assert job["name"] == "Recovered job"
+            assert client.post("/api/jobs", data={"manifest": manifest}).json() == job
+            recovered = client.get(f"/api/recordings/{job['recording_id']}")
+            assert recovered.status_code == 200
+            assert recovered.content == b"speech"
 
     print("self-check passed")
 

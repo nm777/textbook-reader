@@ -1,6 +1,6 @@
 """Local Kokoro speech synthesis with temporary WAV output."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 import os
 from pathlib import Path
 import re
@@ -88,7 +88,9 @@ def remove_wav(path: str | os.PathLike[str]) -> None:
 
 
 def synthesize_pages(
-    pages: Iterable[str], directory: str | os.PathLike[str] | None = None
+    pages: Iterable[str],
+    directory: str | os.PathLike[str] | None = None,
+    progress: Callable[[int, int], None] | None = None,
 ) -> Path:
     """Synthesize ordered pages into a caller-owned temporary WAV path."""
     text = assemble_page_text(pages)
@@ -100,7 +102,16 @@ def synthesize_pages(
     path = Path(name)
     try:
         results = _pipeline(text, voice=_voice)
-        return write_wav(path, (result.audio for result in results))
+
+        def chunks():
+            completed = 0
+            for result in results:
+                yield result.audio
+                if progress is not None:
+                    completed += len(result.graphemes)
+                    progress(min(completed, len(text)), len(text))
+
+        return write_wav(path, chunks())
     except Exception:
         remove_wav(path)
         raise

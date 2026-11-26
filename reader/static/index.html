@@ -10,7 +10,7 @@
 <body>
   <header>
     <h1>Textbook Audio Reader</h1>
-    <p>Turn a photo of a textbook page into spoken audio.</p>
+    <p>Turn textbook photos or pasted text into spoken audio.</p>
     <nav aria-label="Recording history">
       <a href="recordings/">Past recordings</a>
     </nav>
@@ -29,6 +29,12 @@
         <button id="camera-button" type="button">Take a photo with the rear camera</button>
         <input id="camera-input" name="camera-photo" type="file" accept="image/*" capture="environment" hidden>
       </div>
+
+      <div id="text-entry">
+        <label for="text-input">Paste text directly</label>
+        <textarea id="text-input" rows="6" maxlength="100000" placeholder="Paste one page or section here"></textarea>
+        <button id="add-text-button" type="button">Add text as a page</button>
+      </div>
     </section>
 
     <section id="preview-region" aria-labelledby="preview-heading">
@@ -43,6 +49,7 @@
         <li class="page-card" data-page-id="">
           <figure>
             <img data-page-preview alt="Selected textbook page preview">
+            <pre data-page-text-preview hidden></pre>
             <figcaption>
               <strong>Page <span data-page-position></span></strong>
               <span data-page-file-name></span>
@@ -74,7 +81,11 @@
 
     <section aria-labelledby="status-heading">
       <h2 id="status-heading">Status</h2>
-      <p id="status" role="status" aria-live="polite" aria-atomic="true">Add a page photo to begin.</p>
+      <p id="status" role="status" aria-live="polite" aria-atomic="true">Add a photo or paste text to begin.</p>
+      <div id="conversion-progress" hidden>
+        <progress id="progress-bar" max="100" aria-label="Conversion progress"></progress>
+        <p id="progress-details"></p>
+      </div>
     </section>
 
     <section id="audio-result" aria-labelledby="audio-heading" hidden>

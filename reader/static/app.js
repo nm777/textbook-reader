@@ -5,10 +5,14 @@ const MAX_ORIGINAL_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 2400;
 const MIN_CROP_EDGE = 50;
+const ACTIVE_JOB_KEY = "textbook-reader-active-job";
+const RECOVERY_DB = "textbook-reader-recovery";
 
 const photoInput = document.querySelector("#photo-input");
 const cameraButton = document.querySelector("#camera-button");
 const cameraInput = document.querySelector("#camera-input");
+const textInput = document.querySelector("#text-input");
+const addTextButton = document.querySelector("#add-text-button");
 const pageCount = document.querySelector("#page-count");
 const previewEmpty = document.querySelector("#preview-empty");
 const pageList = document.querySelector("#page-list");
@@ -18,6 +22,9 @@ const convertButton = document.querySelector("#convert-button");
 const retryButton = document.querySelector("#retry-button");
 const clearButton = document.querySelector("#clear-button");
 const status = document.querySelector("#status");
+const conversionProgress = document.querySelector("#conversion-progress");
+const progressBar = document.querySelector("#progress-bar");
+const progressDetails = document.querySelector("#progress-details");
 const audioResult = document.querySelector("#audio-result");
 const audioPlayer = document.querySelector("#audio-player");
 const audioDownload = document.querySelector("#audio-download");
@@ -33,7 +40,7 @@ const cropApply = document.querySelector("#crop-apply");
 
 const pages = [];
 let stage = "waiting";
-let message = "Add a page photo to begin.";
+let message = "Add a photo or paste text to begin.";
 let preparing = false;
 let audioUrl = null;
 let requestController = null;
@@ -42,6 +49,8 @@ let nextPageId = 1;
 let cropPage = null;
 let cropBitmap = null;
 let cropReturnPageId = null;
+let activeJobId = sessionStorage.getItem(ACTIVE_JOB_KEY);
+let latestJob = null;
 
 const extractionLabels = {
   ready: "ready to convert",
@@ -60,6 +69,7 @@ function render() {
     stage === "extracting" || stage === "synthesizing" ? "true" : "false",
   );
   status.textContent = message;
+  renderProgress();
 
   if (stage === "complete" && audioUrl) {
     audioDownload.href = audioUrl;
@@ -76,15 +86,24 @@ function render() {
     const position = index + 1;
     const card = pageTemplate.content.firstElementChild.cloneNode(true);
     const preview = card.querySelector("[data-page-preview]");
+    const textPreview = card.querySelector("[data-page-text-preview]");
 
     card.dataset.pageId = page.id;
-    preview.src = page.previewUrl;
-    preview.alt = `Preview of page ${position}: ${page.name}`;
+    if (page.kind === "text") {
+      preview.hidden = true;
+      textPreview.hidden = false;
+      textPreview.textContent = page.text;
+    } else {
+      preview.src = page.previewUrl;
+      preview.alt = `Preview of page ${position}: ${page.name}`;
+    }
     card.querySelector("[data-page-position]").textContent = position;
     card.querySelector("[data-page-file-name]").textContent = page.name;
     const extractionState = card.querySelector("[data-page-extraction-state]");
     extractionState.dataset.state = page.extractionState;
-    extractionState.textContent = extractionLabels[page.extractionState];
+    extractionState.textContent = page.kind === "text"
+      ? "pasted text ready"
+      : extractionLabels[page.extractionState];
 
     const actions = card.querySelector(".page-actions");
     actions.setAttribute("aria-label", `Actions for page ${position}: ${page.name}`);
@@ -102,7 +121,9 @@ function render() {
       button.disabled = busy
         || (button.dataset.action === "move-up" && index === 0)
         || (button.dataset.action === "move-down" && index === pages.length - 1);
-      if (button.dataset.action === "retry") {
+      if (page.kind === "text" && ["replace", "crop", "retry"].includes(button.dataset.action)) {
+        button.hidden = true;
+      } else if (button.dataset.action === "retry") {
         button.hidden = !["partial", "unreadable", "failed"].includes(page.extractionState);
       }
     }
@@ -122,14 +143,30 @@ function setStage(nextStage, nextMessage) {
   render();
 }
 
-function formatDuration(milliseconds) {
-  const totalSeconds = Math.max(1, Math.round(milliseconds / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return [
-    minutes ? `${minutes} ${minutes === 1 ? "minute" : "minutes"}` : "",
-    seconds ? `${seconds} ${seconds === 1 ? "second" : "seconds"}` : "",
-  ].filter(Boolean).join(" ");
+function formatDuration(seconds) {
+  seconds = Math.max(1, Math.ceil(seconds));
+  return seconds < 60 ? `${seconds}s` : `${Math.ceil(seconds / 60)} min`;
+}
+
+function renderProgress() {
+  const active = ["extracting", "synthesizing"].includes(stage);
+  conversionProgress.hidden = !active;
+  if (!active) return;
+  if (!latestJob || /reconnecting/i.test(message)) {
+    progressBar.removeAttribute("value");
+    progressDetails.textContent = "Waiting for conversion status — estimating time remaining…";
+    return;
+  }
+  progressBar.value = latestJob.progress_percent || 0;
+  const elapsed = Math.max(0, (Date.now() / 1000) - latestJob.created_at);
+  const sinceUpdate = Math.max(0, Date.now() / 1000 - latestJob.progress_updated_at);
+  const remaining = latestJob.remaining_seconds;
+  const estimate = remaining == null
+    ? "Estimating time remaining…"
+    : sinceUpdate >= remaining
+      ? "Taking longer than estimated; conversion is still active."
+      : `About ${formatDuration(remaining - sinceUpdate)} remaining (estimate)`;
+  progressDetails.textContent = `${progressBar.value}% complete · ${formatDuration(elapsed)} elapsed · ${estimate}`;
 }
 
 function clearAudio() {
@@ -139,13 +176,118 @@ function clearAudio() {
   audioPlayer.removeAttribute("src");
   audioPlayer.load();
   audioResult.hidden = true;
-  if (audioUrl) {
+  if (audioUrl?.startsWith("blob:")) {
     URL.revokeObjectURL(audioUrl);
-    audioUrl = null;
+  }
+  audioUrl = null;
+}
+
+function recoveryStore(mode) {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(RECOVERY_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("jobs");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const transaction = database.transaction("jobs", mode);
+      resolve({ database, transaction, store: transaction.objectStore("jobs") });
+    };
+  });
+}
+
+async function saveRecovery(jobId) {
+  const { database, transaction, store } = await recoveryStore("readwrite");
+  store.put({
+    createdAt: Date.now(),
+    name: recordingNameInput.value,
+    pages: pages.map((page) => ({
+      id: page.id,
+      kind: page.kind,
+      name: page.name,
+      source: page.source || null,
+      image: page.image || null,
+      crop: page.crop || null,
+      extractionState: page.extractionState,
+      text: page.text,
+      confidence: page.confidence,
+      issues: page.issues,
+    })),
+  }, jobId);
+  await new Promise((resolve, reject) => {
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function restoreRecovery(jobId) {
+  const { database, store } = await recoveryStore("readonly");
+  const request = store.get(jobId);
+  const saved = await new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  if (!saved || pages.length) return;
+
+  recordingNameInput.value = saved.name || "";
+  for (const savedPage of saved.pages) {
+    if (savedPage.kind === "text") {
+      pages.push({ ...savedPage, error: null });
+    } else {
+      pages.push({
+        ...savedPage,
+        source: savedPage.source || savedPage.image,
+        previewUrl: URL.createObjectURL(savedPage.image),
+        error: null,
+      });
+    }
+    const number = Number(savedPage.id.replace("page-", ""));
+    if (Number.isInteger(number)) nextPageId = Math.max(nextPageId, number + 1);
   }
 }
 
+async function deleteRecovery(jobId) {
+  const { database, transaction, store } = await recoveryStore("readwrite");
+  store.delete(jobId);
+  await new Promise((resolve, reject) => {
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function cleanupRecovery() {
+  const { database, store } = await recoveryStore("readwrite");
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const request = store.openCursor();
+  await new Promise((resolve, reject) => {
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve();
+        return;
+      }
+      if (!cursor.value.createdAt || cursor.value.createdAt < cutoff) cursor.delete();
+      cursor.continue();
+    };
+  });
+  database.close();
+}
+
+function forgetActiveJob() {
+  latestJob = null;
+  const jobId = activeJobId;
+  activeJobId = null;
+  sessionStorage.removeItem(ACTIVE_JOB_KEY);
+  if (jobId) deleteRecovery(jobId).catch(() => {});
+}
+
 function stopCurrentOperation() {
+  forgetActiveJob();
   operation += 1;
   requestController?.abort();
   requestController = null;
@@ -206,6 +348,7 @@ async function normalizeImage(file) {
 function newPage(file, source, image = source, crop = { top: 0, right: 0, bottom: 0, left: 0 }) {
   return {
     id: `page-${nextPageId++}`,
+    kind: "image",
     name: file.name || "camera photo",
     source,
     image,
@@ -214,6 +357,19 @@ function newPage(file, source, image = source, crop = { top: 0, right: 0, bottom
     extractionState: "ready",
     text: "",
     confidence: 0,
+    issues: [],
+    error: null,
+  };
+}
+
+function newTextPage(text) {
+  return {
+    id: `page-${nextPageId++}`,
+    kind: "text",
+    name: "Pasted text",
+    extractionState: "readable",
+    text,
+    confidence: 1,
     issues: [],
     error: null,
   };
@@ -228,11 +384,18 @@ function duplicatePage(page) {
     return;
   }
   stopCurrentOperation();
-  const duplicate = newPage({ name: page.name }, page.source, page.image, page.crop);
+  const duplicate = page.kind === "text"
+    ? newTextPage(page.text)
+    : newPage({ name: page.name }, page.source, page.image, page.crop);
   pages.splice(index + 1, 0, duplicate);
   clearAudio();
-  setStage("waiting", `Page ${index + 1} was duplicated as page ${index + 2}. Crop each copy, then confirm and convert.`);
-  focusCropButton(duplicate.id);
+  setStage(
+    "waiting",
+    `Page ${index + 1} was duplicated as page ${index + 2}. ${
+      page.kind === "text" ? "Review the order" : "Crop each copy"
+    }, then confirm and convert.`,
+  );
+  if (page.kind === "image") focusCropButton(duplicate.id);
 }
 
 function cropSelection() {
@@ -455,6 +618,27 @@ async function addImages(event) {
   }
 }
 
+function addText() {
+  const text = textInput.value.trim();
+  if (!text) {
+    message = "Paste some text before adding a page.";
+    render();
+    textInput.focus();
+    return;
+  }
+  if (pages.length >= MAX_PAGES) {
+    message = `You can keep up to ${MAX_PAGES} pages. Remove a page before adding another.`;
+    render();
+    return;
+  }
+
+  stopCurrentOperation();
+  pages.push(newTextPage(text));
+  textInput.value = "";
+  clearAudio();
+  setStage("waiting", `Pasted text was added as page ${pages.length}. Add another page or confirm and convert.`);
+}
+
 async function replaceImage(page, file) {
   stopCurrentOperation();
   const currentOperation = operation;
@@ -529,24 +713,24 @@ function removePage(page) {
   if (index < 0) return;
   stopCurrentOperation();
   pages.splice(index, 1);
-  URL.revokeObjectURL(page.previewUrl);
+  if (page.previewUrl) URL.revokeObjectURL(page.previewUrl);
   clearAudio();
   setStage(
     "waiting",
     pages.length
       ? `Page ${index + 1} was removed. ${pages.length} ${pages.length === 1 ? "page remains" : "pages remain"}.`
-      : "All pages were removed. Add a page photo to begin.",
+      : "All pages were removed. Add a photo or paste text to begin.",
   );
 }
 
 function startOver() {
   if (!pages.length || !window.confirm("Clear all selected pages and audio? This cannot be undone.")) return;
   stopCurrentOperation();
-  for (const page of pages) URL.revokeObjectURL(page.previewUrl);
+  for (const page of pages) if (page.previewUrl) URL.revokeObjectURL(page.previewUrl);
   pages.length = 0;
   recordingNameInput.value = "";
   clearAudio();
-  setStage("waiting", "All pages were cleared. Add a page photo to begin again.");
+  setStage("waiting", "All pages were cleared. Add a photo or paste text to begin again.");
 }
 
 async function responseProblem(response, fallback) {
@@ -575,40 +759,6 @@ function validExtraction(result) {
     && (result.status !== "readable" || result.text.trim());
 }
 
-async function extract(page, currentOperation, signal) {
-  const position = pages.indexOf(page) + 1;
-  page.extractionState = "extracting";
-  page.error = null;
-  setStage("extracting", `Extracting text from page ${position} of ${pages.length}...`);
-
-  const body = new FormData();
-  body.append("image", page.image, "page.jpg");
-  const response = await fetch("api/extract", { method: "POST", body, signal });
-  if (!response.ok) {
-    throw new Error(await responseProblem(response, `Page ${position} could not be processed`));
-  }
-  if (!response.headers.get("content-type")?.includes("application/json")) {
-    throw new Error("The extraction service returned an unexpected response.");
-  }
-
-  let result;
-  try {
-    result = await response.json();
-  } catch {
-    throw new Error("The extraction service returned an unreadable response.");
-  }
-  if (!validExtraction(result)) {
-    throw new Error("The extraction service returned an invalid response.");
-  }
-  if (currentOperation !== operation || signal.aborted || !pages.includes(page)) return;
-
-  page.extractionState = result.status;
-  page.text = result.text;
-  page.confidence = result.confidence;
-  page.issues = result.issues;
-  render();
-}
-
 function attentionMessage() {
   const positions = pages
     .map((page, index) => page.extractionState === "readable" && page.text.trim() ? null : index + 1)
@@ -618,83 +768,115 @@ function attentionMessage() {
   } attention. Retry, replace, or remove ${positions.length === 1 ? "it" : "them"} before creating audio.`;
 }
 
-async function synthesize(orderedPages, name, signal) {
-  setStage(
-    "synthesizing",
-    `Creating audio from ${orderedPages.length} ${orderedPages.length === 1 ? "page" : "pages"}...`,
-  );
-  const response = await fetch("api/speech", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pages: orderedPages, name: name || null }),
-    signal,
-  });
-  if (!response.ok) {
-    throw new Error(await responseProblem(response, "Audio could not be created"));
+function applyJob(job) {
+  latestJob = job;
+  for (const result of job.pages || []) {
+    const page = pages.find((item) => item.id === result.id);
+    if (!page || !validExtraction(result)) continue;
+    page.extractionState = result.status;
+    page.text = result.text;
+    page.confidence = result.confidence;
+    page.issues = result.issues;
   }
-  if (!response.headers.get("content-type")?.startsWith("audio/")) {
-    throw new Error("The speech service returned an unexpected response.");
+  const failedPage = pages.find((page) => page.id === job.failed_page_id);
+  if (failedPage) failedPage.extractionState = "failed";
+
+  if (job.status === "complete" && job.recording_id) {
+    deleteRecovery(job.id).catch(() => {});
+    clearAudio();
+    audioUrl = `api/recordings/${encodeURIComponent(job.recording_id)}`;
+    audioPlayer.src = audioUrl;
+    audioDownload.download = job.name ? `${job.name}.wav` : "textbook-reading.wav";
+    audioResult.hidden = false;
+    setStage("complete", job.message);
+    return true;
   }
-  const blob = await response.blob();
-  if (!blob.size) {
-    throw new Error("The speech service returned an empty recording.");
+  if (job.status === "attention") {
+    setStage("attention", pages.length ? attentionMessage() : job.message);
+    return true;
   }
-  return blob;
+  if (job.status === "failed") {
+    setStage("failed", job.message);
+    return true;
+  }
+  setStage(job.status === "synthesizing" ? "synthesizing" : "extracting", job.message);
+  return false;
 }
 
-async function convert(retryPage = null) {
-  if (!pages.length || preparing || requestController || (retryPage && !pages.includes(retryPage))) return;
+async function pollJob(jobId, allowMissing = false) {
+  let missingAttempts = 0;
+  while (activeJobId === jobId) {
+    try {
+      const response = await fetch(`api/jobs/${encodeURIComponent(jobId)}`);
+      if (response.status === 404 && allowMissing && missingAttempts < 10) {
+        missingAttempts += 1;
+      } else {
+        if (!response.ok) throw new Error(await responseProblem(response, "Conversion status could not be loaded"));
+        const job = await response.json();
+        if (activeJobId !== jobId || applyJob(job)) return;
+        missingAttempts = 0;
+      }
+    } catch (error) {
+      if (activeJobId !== jobId) return;
+      const unavailable = error instanceof TypeError;
+      if (!unavailable || missingAttempts >= 10) {
+        setStage(
+          "failed",
+          "The conversion could not be recovered. Your pages were kept; retry or check Past recordings.",
+        );
+        return;
+      }
+      setStage("extracting", "Connection lost. Reconnecting to the conversion...");
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 2000));
+  }
+}
+
+async function convert() {
+  if (!pages.length || preparing || requestController) return;
 
   const currentOperation = ++operation;
-  const startedAt = performance.now();
   requestController = new AbortController();
   const { signal } = requestController;
-  let currentPage = null;
+  const jobId = crypto.randomUUID();
+  forgetActiveJob();
+  activeJobId = jobId;
+  sessionStorage.setItem(ACTIVE_JOB_KEY, jobId);
 
   try {
-    const pendingPages = retryPage
-      ? [retryPage]
-      : pages.filter((page) => page.extractionState !== "readable" || !page.text.trim());
-    for (const page of pendingPages) {
-      currentPage = page;
-      await extract(page, currentOperation, signal);
-      if (currentOperation !== operation || signal.aborted) return;
-      currentPage = null;
-    }
-
-    if (pages.some((page) => page.extractionState !== "readable" || !page.text.trim())) {
-      setStage("attention", attentionMessage());
-      return;
-    }
-
-    const orderedPages = pages.map((page) => ({ id: page.id, text: page.text }));
     const recordingName = recordingNameInput.value.replace(/\s+/g, " ").trim();
     recordingNameInput.value = recordingName;
-    const recording = await synthesize(orderedPages, recordingName, signal);
-    if (currentOperation !== operation || signal.aborted) return;
-
-    clearAudio();
-    audioUrl = URL.createObjectURL(recording);
-    audioPlayer.src = audioUrl;
-    audioDownload.download = recordingName ? `${recordingName}.wav` : "textbook-reading.wav";
-    audioResult.hidden = false;
-    setStage(
-      "complete",
-      `${pages.length} ${pages.length === 1 ? "page is" : "pages are"} complete in ${
-        formatDuration(performance.now() - startedAt)
-      }. Use the audio controls to play, pause, or seek.`,
-    );
+    const body = new FormData();
+    const manifestPages = pages.map((page) => {
+      if (page.kind === "text" || (page.extractionState === "readable" && page.text.trim())) {
+        return { id: page.id, kind: "text", text: page.text };
+      }
+      body.append("images", page.image, "page.jpg");
+      return { id: page.id, kind: "image" };
+    });
+    try {
+      await saveRecovery(jobId);
+    } catch {
+      throw new Error("This browser could not save the pages for recovery. Free some browser storage and try again.");
+    }
+    body.append("manifest", JSON.stringify({ id: jobId, pages: manifestPages, name: recordingName || null }));
+    setStage("extracting", "Uploading pages and starting conversion...");
+    const response = await fetch("api/jobs", { method: "POST", body, signal });
+    if (!response.ok) throw new Error(await responseProblem(response, "Conversion could not be started"));
+    const job = await response.json();
+    if (currentOperation !== operation || signal.aborted || activeJobId !== jobId) return;
+    requestController = null;
+    if (!applyJob(job)) await pollJob(jobId);
   } catch (error) {
     if (currentOperation !== operation || error?.name === "AbortError") return;
-    if (currentPage?.extractionState === "extracting") {
-      currentPage.extractionState = "failed";
-      currentPage.error = error;
+    requestController = null;
+    if (error instanceof TypeError) {
+      setStage("extracting", "Connection lost. Reconnecting to the conversion...");
+      await pollJob(jobId, true);
+      return;
     }
-    const detail = error instanceof Error ? error.message : "Conversion was interrupted.";
-    const retained = currentPage
-      ? `Page ${pages.indexOf(currentPage) + 1} was kept. Use its Retry, Replace, or Remove control.`
-      : "Extracted page text was kept. Retry conversion.";
-    setStage("failed", `${detail} ${retained}`);
+    forgetActiveJob();
+    setStage("failed", error instanceof Error ? error.message : "Conversion could not be started.");
   } finally {
     if (currentOperation === operation) {
       requestController = null;
@@ -715,12 +897,13 @@ function handlePageAction(event) {
   if (button.dataset.action === "crop") openCrop(page);
   if (button.dataset.action === "duplicate") duplicatePage(page);
   if (button.dataset.action === "remove") removePage(page);
-  if (button.dataset.action === "retry") convert(page);
+  if (button.dataset.action === "retry") convert();
 }
 
 photoInput.addEventListener("change", addImages);
 cameraButton.addEventListener("click", () => cameraInput.click());
 cameraInput.addEventListener("change", addImages);
+addTextButton.addEventListener("click", addText);
 pageList.addEventListener("click", handlePageAction);
 convertButton.addEventListener("click", () => convert());
 retryButton.addEventListener("click", () => convert());
@@ -739,8 +922,20 @@ cropDialog.addEventListener("close", () => closeCrop(true));
 window.addEventListener("unload", () => {
   requestController?.abort();
   closeCrop();
-  for (const page of pages) URL.revokeObjectURL(page.previewUrl);
+  for (const page of pages) if (page.previewUrl) URL.revokeObjectURL(page.previewUrl);
   clearAudio();
 });
 
-render();
+async function start() {
+  cleanupRecovery().catch(() => {});
+  if (activeJobId) {
+    await restoreRecovery(activeJobId).catch(() => {});
+    setStage("extracting", "Reconnecting to the previous conversion...");
+    pollJob(activeJobId, true);
+  } else {
+    render();
+  }
+}
+
+start();
+window.setInterval(renderProgress, 1000);
